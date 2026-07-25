@@ -1,6 +1,6 @@
-# AI QA Assistant
+# QAgentic
 
-AI QA Assistant is an AI-powered QA framework designed to analyze software requirements, plan QA artifacts, generate test artifacts, and review generated output using LLMs.
+QAgentic is an AI-powered QA framework designed to analyze software requirements, plan QA artifacts, generate test artifacts, and review generated output using LLMs.
 
 Version: **v0.1.0**
 
