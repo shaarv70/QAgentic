@@ -1,21 +1,22 @@
 from prompts.correction_prompt import build_correction_prompt
 from services.base_generator import BaseGenerator
-from prompts.summary_prompt import build_summary_prompt
+from prompts.database_prompt import build_database_prompt
 
 
-class SummaryGenerator(BaseGenerator):
+class DatabaseGenerator(BaseGenerator):
 
     def __init__(self, llm_service):
         self.llm_service = llm_service
 
-    def generate(self, task,  execution_context):
+    def generate(self, task, execution_context):
 
-        prompt = build_summary_prompt(
+        prompt = build_database_prompt(
             task,
             execution_context.requirement
         )
 
         return self.llm_service.ask_llm(prompt)
+    
     
     
     

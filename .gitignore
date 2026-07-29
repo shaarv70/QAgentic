@@ -1,4 +1,4 @@
-# Environment
+# Environment / secrets
 .env
 
 # Python cache
@@ -14,7 +14,7 @@ logs/
 *.log
 
 # Generated runtime output
-generated/
+output/
 
 # IDE
 .vscode/
@@ -24,6 +24,5 @@ generated/
 .DS_Store
 Thumbs.db
 
-
+# Unrelated local project
 PythonPractice/
-
