@@ -1,6 +1,6 @@
 from providers.base_provider import BaseProvider
 import requests,json
-from config import OLLAMA_URL, MODEL_NAME,MAX_RETRIES 
+from config import OLLAMA_URL, MODEL_NAME,MAX_EXECUTION_RETRIES 
 from utils.logger import logger
 
 
@@ -14,7 +14,7 @@ class OllamaProvider(BaseProvider):
                "prompt": prompt,
                "stream": False
                }
-            for attempt in range(MAX_RETRIES): 
+            for attempt in range(MAX_EXECUTION_RETRIES): 
                
                try:
                

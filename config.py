@@ -12,12 +12,19 @@ def get_required_env(key: str) -> str:
 
     return value
 
+
+LLM_PROVIDER = "ollama"
+
 OLLAMA_URL = get_required_env("OLLAMA_URL")
 
 MODEL_NAME = get_required_env("MODEL_NAME")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL")
 
-OUTPUT_FOLDER = os.getenv("OUTPUT_FOLDER")
+OUTPUT_FOLDER = os.getenv(
+    "OUTPUT_FOLDER",
+    "generated"
+)
 
-MAX_RETRIES = 3
+MAX_EXECUTION_RETRIES = 3
+MAX_REVIEW_RETRIES = 2

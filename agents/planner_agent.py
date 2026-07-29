@@ -9,7 +9,7 @@ class PlannerAgent(BaseAgent):
         
         def execute(self, state):
                 
-             state.plan=self.planning_service.plan_artifacts(state.application_type, state.requirement)   #storing oject of plan in state's plan dictionary 
-             logger.info(f"Artifacts Selected:{state.plan.artifacts}")
+             state.plan=self.planning_service.create_plan(state.requirement, state.requirement_intelligence)   ## Store generated Plan object in state 
+             logger.info( f"Tasks Planned: {[task.capability for task in state.plan.tasks]}")
              return state
     

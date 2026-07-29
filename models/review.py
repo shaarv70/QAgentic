@@ -1,8 +1,7 @@
 class Review:
 
-    def __init__(self):
+    def __init__(self, status="", feedback=""):
 
-        self.status = ""
-
-        self.feedback = ""
+       self.status = status
+       self.feedback = feedback
     

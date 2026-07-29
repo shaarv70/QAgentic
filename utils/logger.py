@@ -14,7 +14,7 @@ formatter = logging.Formatter(
 
 # File Handler
 file_handler = logging.FileHandler(
-    log_folder / "qa_agent.log"
+    log_folder / "qa_agent.log",encoding="utf-8"
 )
 file_handler.setFormatter(formatter)
 

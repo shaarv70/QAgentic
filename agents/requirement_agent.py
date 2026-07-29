@@ -1,17 +1,9 @@
 from agents.base_agent import BaseAgent
-from services.requirement_service import RequirementService
+from utils.logger import logger
 
 
 class RequirementAgent(BaseAgent):
-    
-    
-    def __init__(self,requirement_service) -> None:
-       
-        super().__init__()
-        self.requirement_service=requirement_service
-    
-    
-    def execute(self,state):
-        
-       state.requirement_analysis=self.requirement_service.analyze_requirement(state.application_type,state.requirement)
-       return state
+
+    def execute(self, state):
+        logger.info(f"Requirement received: {state.requirement}")
+        return state

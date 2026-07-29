@@ -2,7 +2,7 @@ class Plan:
 
     def __init__(self):
 
-        self.artifacts = []
+        self.tasks = []
 
         self.priority = "MEDIUM"
 

@@ -5,26 +5,19 @@ from registries.tool_registry import ToolRegistry
 from services.llm_service import LLMService
 from utils.logger import logger
 
-# -----------------------------------------------------
-# Welcome Message
-# -----------------------------------------------------
+
 
 print("=" * 60)
 print("         AI QA Assistant")
 print("=" * 60)
-print("\nSelect Application Type")
-print("1. Web")
-print("2. API")
-print("3. Mobile\n")
-
+print("\nDescribe what you want the QA Assistant to do.")
 print("Type 'exit' anytime to quit.")
 print("=" * 60)
 
-# -----------------------------------------------------
-# Dependency Injection (Composition Root)
-# -----------------------------------------------------
 
-applications = ["Web", "API", "Mobile"]
+# -----------------------------------------------------
+# Dependency Injection
+# -----------------------------------------------------
 
 provider_registry = ProviderRegistry()
 
@@ -37,7 +30,6 @@ agent_registry = AgentRegistry(
     llm_service
 )
 
-supervisor = SupervisorAgent(agent_registry)
 
 # -----------------------------------------------------
 # Chat Loop
@@ -45,24 +37,16 @@ supervisor = SupervisorAgent(agent_registry)
 
 while True:
 
-    choice = input("Enter your choice: ")
-
-    if choice not in ["1", "2", "3"]:
-        print("\nInvalid Choice")
-        continue
-
-    application_type = applications[int(choice) - 1]
-
-    requirement = input("\nEnter Requirement : ")
-    
-    choice = input("Enter your choice: ")
-
-    if choice.lower() == "exit":
-        logger.info("\nGoodbye!")
-        break
+    requirement = input("\nEnter Requirement: ").strip()
 
     if requirement.lower() == "exit":
         logger.info("\nGoodbye!")
         break
 
-    supervisor.start(application_type, requirement)
+    if not requirement:
+        print("\nRequirement cannot be empty.")
+        continue
+
+    supervisor = SupervisorAgent(agent_registry)
+
+    supervisor.start(requirement)

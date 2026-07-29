@@ -4,8 +4,21 @@ from utils.logger import logger
 
 class ArtifactManager:
 
-    def save(self, name, content):
+    def save(self, artifact, run_id):
 
-        save_to_file(name, content)
+        filename = (
+            f"{artifact.task_id}_"
+            f"{artifact.capability}.md"
+        )
 
-        logger.info(f"✅ Saved {name}")
+        path = save_to_file(
+            run_id,
+            filename,
+            artifact.content
+        )
+
+        logger.info(
+            f"Saved artifact: {path}"
+        )
+
+        return path
