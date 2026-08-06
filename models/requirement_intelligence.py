@@ -1,13 +1,19 @@
 class RequirementIntelligence:
 
+    status: str
+    intent: str
+    context: dict[str, str]
+    assumptions: list[str]
+    questions: list[str]
+
+
     def __init__(
         self,
         status,
         intent,
         context=None,
         assumptions=None,
-        questions=None
-    ):
+        questions=None):
 
         self.status = status
         self.intent = intent

@@ -13,7 +13,7 @@ def get_required_env(key: str) -> str:
     return value
 
 
-LLM_PROVIDER = "ollama"
+LLM_PROVIDER = "groq"
 
 OLLAMA_URL = get_required_env("OLLAMA_URL")
 

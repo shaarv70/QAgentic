@@ -1,52 +1,100 @@
-from registries.agent_registry import AgentRegistry
-from agents.supervisor_agent import SupervisorAgent
-from registries.provider_registry import ProviderRegistry
-from registries.tool_registry import ToolRegistry
-from services.llm_service import LLMService
+from bootstrap.application_container import ApplicationContainer
 from utils.logger import logger
 
 
 
-print("=" * 60)
-print("         AI QA Assistant")
-print("=" * 60)
-print("\nDescribe what you want the QA Assistant to do.")
-print("Type 'exit' anytime to quit.")
-print("=" * 60)
 
 
-# -----------------------------------------------------
-# Dependency Injection
-# -----------------------------------------------------
 
-provider_registry = ProviderRegistry()
+def main():
 
-llm_service = LLMService(provider_registry)
+    """
+==========================================================
+Module : app.py
+==========================================================
 
-tool_registry = ToolRegistry(llm_service)
+Purpose:
+    Entry point of the AI QA Assistant.
 
-agent_registry = AgentRegistry(
-    tool_registry,
-    llm_service
-)
+Responsibilities:
+    • Create the application.
+    • Display the welcome banner.
+    • Accept user requirements.
+    • Delegate execution to the SupervisorAgent.
+    • Keep the application running until the user exits.
+
+This module NEVER:
+    ❌ Creates framework components manually.
+    ❌ Contains workflow logic.
+    ❌ Executes workflow nodes.
+    ❌ Calls LLM providers directly.
+
+Execution Flow:
+
+    Application Start
+            │
+            ▼
+    Create ApplicationContainer
+            │
+            ▼
+    Create SupervisorAgent
+            │
+            ▼
+    Display Welcome Banner
+            │
+            ▼
+    Accept User Requirement
+            │
+            ▼
+    SupervisorAgent.start()
+            │
+            ▼
+    Wait For Next Requirement
+
+==========================================================
+"""
+
+    # -----------------------------------------------------
+    # Build the complete AI QA application.
+    # -----------------------------------------------------
+    container = ApplicationContainer()
+    supervisor = container.create_supervisor()
 
 
-# -----------------------------------------------------
-# Chat Loop
-# -----------------------------------------------------
+    # -----------------------------------------------------
+    # Display application banner.
+    # -----------------------------------------------------
+    print("=" * 60)
+    print("         AI QA Assistant")
+    print("=" * 60)
+    print("\nDescribe what you want the QA Assistant to do.")
+    print("Type 'exit' anytime to quit.")
+    print("=" * 60)
 
-while True:
 
-    requirement = input("\nEnter Requirement: ").strip()
+    # -----------------------------------------------------
+    # Main interaction loop.
+    # Continuously accepts requirements until the user exits.
+    # -----------------------------------------------------
+    while True:
 
-    if requirement.lower() == "exit":
-        logger.info("\nGoodbye!")
-        break
+        # Read the user's requirement.
+        requirement = input("\nEnter Requirement: ").strip()
 
-    if not requirement:
-        print("\nRequirement cannot be empty.")
-        continue
+        # Gracefully terminate the application.
+        if requirement.lower() == "exit":
+            logger.info("\nGoodbye!")
+            break
 
-    supervisor = SupervisorAgent(agent_registry)
+        # Prevent empty requirements.
+        if not requirement:
+            print("\nRequirement cannot be empty.")
+            continue
 
-    supervisor.start(requirement)
+        # Delegate the complete workflow execution to the supervisor.
+        supervisor.start(requirement)
+
+
+
+if __name__ == "__main__":
+    main()

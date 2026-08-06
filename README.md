@@ -1,141 +1,342 @@
-# QAgentic
+# 🚀 QAgentic
 
-QAgentic is an AI-powered QA framework designed to analyze software requirements, plan QA artifacts, generate test artifacts, and review generated output using LLMs.
+<div align="center">
 
-Version: **v0.2.0**
+### AI-Powered Workflow Framework for QA Engineering
 
-## Features
+Transform software requirements into high-quality QA deliverables using intelligent planning, workflow orchestration, AI review, and automated correction.
 
-Requirement analysis
-Interactive requirement clarification
-Requirement intelligence
-QA artifact planning
-Functional test case generation
-Automation script generation
-Requirement summary generation
-Database artifact generation
-Dependency-aware task execution
-Parallel execution of independent tasks
-AI-based artifact review
-Automatic correction of failed artifacts
-Retry mechanism for failed generation
-Approved artifact propagation to dependent tasks
-Configurable LLM provider architecture
-Ollama, Groq, and Gemini integration
+**Current Version:** **v0.3.0**
 
-## Architecture
+</div>
 
-The framework follows a layered, extensible architecture using:
+---
 
-Agent architecture
-Registry pattern
-Provider pattern
-Dependency injection
-Service layer
-Abstract base classes
-Execution context
-Dependency-aware task planning
-Parallel execution using ThreadPoolExecutor
-Review and correction workflow
+# 📖 Overview
 
-### Execution Flow
+QAgentic is a workflow-driven AI framework that automates the QA lifecycle by combining Large Language Models (LLMs), LangGraph workflow orchestration, modular AI agents, and dependency-aware execution.
 
-User Requirement
-→ Requirement Agent
-→ Requirement Intelligence Agent
-→ Planner Agent
-→ Supervisor Agent
-→ Execution Agent
-→ Tool Registry
-→ LLM Service
-→ LLM Provider
-→ Review Agent
-→ Correction if required
-→ Approved Artifact
-→ Dependent Tasks
+Instead of generating isolated outputs, QAgentic analyzes requirements, requests clarification when needed, intelligently plans QA tasks, executes them in the correct order, reviews generated artifacts, automatically corrects low-quality outputs, and publishes approved artifacts.
 
-Independent tasks can execute in parallel, while dependent tasks execute only after their required artifacts have successfully passed review.
+---
 
-## Project Structure
+# ✨ Key Features
 
-agents/         Agent implementations
-artifacts/      Artifact management
-models/         Application state and domain models
-prompts/        LLM prompt builders
-providers/      LLM provider implementations
-registries/     Agent, tool, and provider registries
-services/       Framework services and generators
-utils/          Logging and utility components
+## 🧠 Requirement Intelligence
 
-app.py           Application entry point
-config.py        Application configuration
+* Requirement Analysis
+* Intent Extraction
+* Interactive Clarification
+* Requirement Re-analysis
 
-## Requirements
+## 🤖 AI QA Generation
 
-Python 3.12+
-At least one supported LLM provider
+* Requirement Summary Generation
+* Functional Test Case Generation
+* Automation Script Generation
+* Database Artifact Generation
 
-For local execution with Ollama:
+## ⚙ Workflow Engine
 
-Ollama
-A locally available Ollama model
+* LangGraph Workflow Engine
+* Node-based Architecture
+* Dependency-aware Task Planning
+* Parallel Execution
+* Sequential Dependency Execution
+* Workflow State Management
+* Artifact Publishing
 
-## Installation
+## 🔍 Quality Assurance
 
-Clone the repository:
+* AI Artifact Review
+* Automatic Artifact Correction
+* Retry Mechanism
+* Quality Feedback Loop
 
-git clone <repository-url>
-cd AI-QA-Agent
+## 🏛 Framework Architecture
 
-Create a virtual environment:
+* Registry Pattern
+* Provider Pattern
+* Dependency Injection
+* Service Layer
+* Abstract Base Classes
+* Modular Workflow Design
 
+---
+
+# 🏗 High-Level Architecture
+
+```mermaid
+flowchart TD
+
+A["User Requirement"]
+
+B["Supervisor Agent"]
+
+C["Workflow Manager"]
+
+D["LangGraph Engine"]
+
+E["Workflow Builder"]
+
+F["Workflow Nodes"]
+
+G["AI Agents"]
+
+H["Services"]
+
+I["LLM Providers"]
+
+A --> B
+B --> C
+C --> D
+D --> E
+E --> F
+F --> G
+G --> H
+H --> I
+```
+
+---
+
+# 🔄 Workflow Execution
+
+```mermaid
+flowchart TD
+
+A["Requirement"]
+
+B["Requirement Intelligence"]
+
+C{"Requirement Ready?"}
+
+D["Collect Clarifications"]
+
+E["Planner"]
+
+F["Execution"]
+
+G["Review"]
+
+H{"Quality Passed?"}
+
+I["Correction"]
+
+J["Publish"]
+
+A --> B
+
+B --> C
+
+C -- No --> D
+
+D --> B
+
+C -- Yes --> E
+
+E --> F
+
+F --> G
+
+G --> H
+
+H -- Yes --> J
+
+H -- No --> I
+
+I --> G
+```
+
+---
+
+# ⚡ Execution Pipeline
+
+```mermaid
+flowchart LR
+
+Requirement --> Intelligence --> Planner --> Execution --> Review --> Publish
+Review -->|Fail| Correction --> Review
+```
+
+---
+
+# 📁 Project Structure
+
+```text
+QAgentic
+│
+├── agents/              AI Agent implementations
+├── artifacts/           Artifact management
+├── bootstrap/           Application initialization
+├── models/              Domain models & workflow state
+├── nodes/               Workflow nodes
+├── prompts/             Prompt builders
+├── providers/           LLM providers
+├── registries/          Framework registries
+├── services/            Business services
+├── workflow/            Workflow engine
+├── utils/               Utilities & logging
+│
+├── app.py               Application entry point
+├── config.py            Configuration
+└── requirements.txt
+```
+
+---
+
+# 🤖 Supported AI Providers
+
+| Provider         |   Status   |
+| ---------------- | :--------: |
+| Ollama           |      ✅     |
+| Groq             |      ✅     |
+| Google Gemini    |      ✅     |
+| OpenAI           | 🚧 Planned |
+| Anthropic Claude | 🚧 Planned |
+| Azure OpenAI     | 🚧 Planned |
+
+The provider architecture allows additional AI providers to be integrated without modifying the workflow engine.
+
+---
+
+# ⚙ Requirements
+
+* Python 3.12+
+* LangGraph
+* At least one supported AI provider
+
+---
+
+# 🚀 Installation
+
+Clone the repository
+
+```bash
+git clone https://github.com/<your-username>/QAgentic.git
+
+cd QAgentic
+```
+
+Create a virtual environment
+
+```bash
 python -m venv .venv
+```
 
-Activate it on Windows:
+Activate the environment
 
+### Windows
+
+```bash
 .venv\Scripts\activate
+```
 
-Install dependencies:
+Install dependencies
 
+```bash
 pip install -r requirements.txt
+```
 
-## Configuration
+---
 
-Create a .env file in the project root.
+# ⚙ Configuration
 
-Example:
+Create a `.env` file.
 
-GROQ_API_KEY=
-GEMINI_API_KEY=
+Example
+
+```properties
+# Ollama
 OLLAMA_URL=http://localhost:11434/api/generate
-MODEL_NAME=<your-model-name>
+
+# Groq
+GROQ_API_KEY=
+
+# Google Gemini
+GEMINI_API_KEY=
+
+# Default Model
+MODEL_NAME=
+
 LOG_LEVEL=INFO
+
 OUTPUT_FOLDER=output
+```
 
-Configure the variables required for the LLM provider you want to use.
+---
 
-The .env file is excluded from Git and should not be committed.
+# ▶ Running
 
-## Run
-
-Run the application:
-
+```bash
 python app.py
+```
 
-Enter your QA requirement when prompted.
+QAgentic automatically performs:
 
-The framework will analyze the requirement, request clarification when necessary, plan the required QA tasks, resolve dependencies, generate artifacts, review the generated output, correct failed artifacts when applicable, and save approved artifacts.
+* Requirement Analysis
+* Requirement Clarification (if required)
+* Requirement Re-analysis
+* Task Planning
+* Dependency Resolution
+* Parallel Execution
+* AI Review
+* Automatic Correction
+* Artifact Publishing
 
-## Current LLM Support
+---
 
-Ollama
-Groq
-Gemini
+# 📌 Current Architecture
 
-The provider architecture is designed to support additional LLM providers in future versions.
+✔ Workflow-driven
 
-## Status
+✔ LangGraph-based
 
-This is the **v0.2.0** release of the project.
+✔ Modular Nodes
 
-This release extends the initial agent framework with requirement intelligence, dependency-aware task execution, execution context, multiple QA generators, review and correction workflows, approved artifact propagation, and multi-provider LLM support.
+✔ Multi-Agent
+
+✔ Multi-Provider LLM
+
+✔ AI Review Loop
+
+✔ Dependency-aware Planning
+
+✔ Parallel Execution
+
+✔ Artifact Publishing
+
+---
+
+# 🗺 Roadmap
+
+| Version | Status | Highlights                                                |
+| ------- | :----: | --------------------------------------------------------- |
+| v0.1.0  |   ✅   | Initial AI Agent Framework                                |
+| v0.2.0  |   ✅   | Planning, Review & Parallel Execution                     |
+| v0.3.0  |   ✅   | LangGraph Workflow, Application Container, Workflow Nodes |
+| v0.3.1  |   🚧   | Prompt Service, LLM Request/Response, Agent Profiles      |
+| v0.4.0  |   🚧   | LangChain Integration & Memory                            |
+| v0.5.0  |   🚧   | Guardrails                                                |
+| v0.6.0  |   🚧   | Model Context Protocol (MCP)                              |
+| v1.0.0  |   🎯   | Enterprise AI QA Platform                                 |
+
+---
+
+# 🤝 Contributing
+
+Contributions, feature requests, bug reports, and discussions are welcome.
+
+If you'd like to contribute:
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Submit a Pull Request
+
+---
+
+# 📄 License
+
+This project is licensed under the **MIT License**.
+
+See the **LICENSE** file for complete details.
