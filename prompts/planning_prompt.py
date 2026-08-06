@@ -24,89 +24,235 @@ def build_planning_prompt(
     )
 
     return f"""
-You are a Senior QA Architect.
+You are a Senior Technical Planner responsible for creating the smallest valid
+execution plan for an AI Agent Framework.
 
-Requirement:
+====================================================================
+REQUIREMENT
+====================================================================
+
 {requirement}
 
-Requirement Analysis:
+====================================================================
+REQUIREMENT ANALYSIS
+====================================================================
+
 {intelligence_json}
 
-Currently Available Capabilities:
+====================================================================
+AVAILABLE CAPABILITIES
+====================================================================
+
 {capabilities_json}
 
-Create an execution plan for the requirement.
+====================================================================
+PLANNING OBJECTIVE
+====================================================================
 
-Break the work into tasks that can be executed using the currently
-available capabilities.
+Create the SMALLEST executable plan that completely satisfies the
+user's requirement.
+
+A good planner minimizes the number of tasks.
+
+Never split work unless there is a real execution dependency or
+multiple independent deliverables.
+
+Do NOT create additional work simply because it might be useful.
+
+====================================================================
+PLANNING PRINCIPLES
+====================================================================
+
+1. Correctness
+   The generated plan must satisfy the user's requirement.
+
+2. Minimality
+   Produce the fewest possible tasks.
+
+3. Dependency Awareness
+   Create dependencies only when one task requires the output
+   of another task.
+
+4. Parallelism
+   Execute tasks in parallel only when they are completely
+   independent.
+
+====================================================================
+TASK CREATION RULES
+====================================================================
+
+Create ONE task whenever a single capability can satisfy the
+entire requirement.
+
+Split into multiple tasks ONLY when:
+
+- Different capabilities are required.
+- One task consumes another task's output.
+- The requirement explicitly requests multiple deliverables.
+
+Never create optional tasks.
+
+Never create supporting tasks unless explicitly requested.
+
+Never create tasks for:
+
+- Test Cases
+- Documentation
+- README
+- Design Documents
+- Architecture Diagrams
+- Automation Scripts
+- API Collections
+
+unless the user explicitly requests them.
+
+====================================================================
+DEPENDENCY RULES
+====================================================================
+
+Each task must contain a "depends_on" field.
+
+depends_on contains task IDs whose OUTPUTS are required before
+the current task can execute.
+
+Create dependencies ONLY when outputs are required.
+
+Do NOT create dependencies simply because tasks are related.
+
+Example
+
+Generate test cases
+
+↓
+
+Automate test cases
+
+task_1
+depends_on = []
+
+task_2
+depends_on = ["task_1"]
+
+because task_2 requires task_1's output.
+
+====================================================================
+TASK FORMAT
+====================================================================
 
 Each task must contain:
 
-- capability: The capability that will execute this task.
-- description: The specific work that must be performed.
-- context: Information needed to execute the task.
+- capability
+- description
+- context
+- depends_on
 
 Return ONLY valid JSON.
+
+Example:
+
+{{
+    "tasks": [
+        {{
+            "capability": "summary",
+            "description": "Generate Java Hello World source code.",
+            "context": {{}},
+            "depends_on": []
+        }}
+    ],
+    "priority": "LOW",
+    "parallel": true
+}}
+
+====================================================================
+PLANNING EXAMPLES
+====================================================================
+
+Example 1
+
+Requirement
+
+Generate Java Hello World program.
+
+Output
+
+{{
+    "tasks": [
+        {{
+            "capability": "summary",
+            "description": "Generate Java Hello World source code.",
+            "context": {{}},
+            "depends_on": []
+        }}
+    ],
+    "priority": "LOW",
+    "parallel": true
+}}
+
+------------------------------------------------------------
+
+Example 2
+
+Requirement
+
+Generate REST API test cases.
+
+Output
 
 {{
     "tasks": [
         {{
             "capability": "testcase",
-            "description": "Generate functional test cases for login",
-            "context": {{}}
+            "description": "Generate REST API functional test cases.",
+            "context": {{}},
             "depends_on": []
         }}
     ],
     "priority": "MEDIUM",
     "parallel": true
 }}
-TASK DEPENDENCIES:
 
-Each task must contain a "depends_on" field.
+------------------------------------------------------------
 
-"depends_on" is a list of task IDs whose generated artifacts are
-required before the current task can execute.
+Example 3
 
-Use an empty list when the task can execute independently.
+Requirement
 
-Example:
+Generate REST API test cases and automate them.
 
-If the user requests:
+Output
 
-"Generate functional test cases and automate the generated test cases"
+{{
+    "tasks": [
+        {{
+            "capability": "testcase",
+            "description": "Generate REST API functional test cases.",
+            "context": {{}},
+            "depends_on": []
+        }},
+        {{
+            "capability": "automation",
+            "description": "Automate the generated REST API test cases.",
+            "context": {{}},
+            "depends_on": ["task_1"]
+        }}
+    ],
+    "priority": "HIGH",
+    "parallel": false
+}}
 
-create:
+====================================================================
+OUTPUT RULES
+====================================================================
 
-task_1:
-capability = testcase
-depends_on = []
+Return ONLY valid JSON.
 
-task_2:
-capability = automation
-depends_on = ["task_1"]
+Do NOT include:
 
-because automation must use the test cases produced by task_1.
+- Markdown
+- Explanations
+- Comments
+- Notes
+- Code fences
 
-Do NOT create dependencies merely because tasks are related.
-
-A dependency exists only when a task requires the OUTPUT of another
-task to perform its work.
-
-Independent tasks should have depends_on = [].
-
-Rules:
-
-- Use only capabilities listed under Currently Available Capabilities.
-- Create only tasks required to satisfy the user's request.
-- Do not create unnecessary tasks.
-- Use the analyzed intent to understand the requested outcome.
-- Use grounded requirement context when creating task context.
-- Preserve user-provided values exactly.
-- Do not convert assumptions into confirmed facts.
-- Include only context relevant to executing that specific task.
-- Do not invent technologies, business rules, URLs, validation behavior,
-  implementation details, or application behavior.
-- Keep each task focused on one executable unit of work.
-- priority must be HIGH, MEDIUM, or LOW.
-- parallel must be true only when all planned tasks can execute independently.
+Return ONLY the JSON object.
 """

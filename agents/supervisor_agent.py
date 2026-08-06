@@ -1,216 +1,140 @@
-from artifacts.artifact_manager import ArtifactManager
-from models.conversation import Conversation
 from models.state import State
+from models.workflow_state import WorkflowState
 from utils.logger import logger
-from datetime import datetime
-from config import MAX_REVIEW_RETRIES
+
 
 
 class SupervisorAgent:
+    """
+==========================================================
+Class : SupervisorAgent
+==========================================================
 
-    def __init__(self, registry):
+Purpose:
+    Entry point of the AI QA Assistant.
 
-        self.registry = registry
-        self.state = State()
-        self.conversation = Conversation()
-        self.artifact_manager = ArtifactManager()
-        
-        
-    def _quality_check(self,task,artifact,execution_agent,review_agent):
+Responsibilities:
+    • Accept user requirements.
+    • Create the initial workflow state.
+    • Delegate execution to the WorkflowManager.
+    • Display the final execution results.
 
-        artifact = review_agent.review_artifact(
-            task,
-            artifact
-        )
+This class NEVER:
+    ❌ Executes workflow nodes.
+    ❌ Contains business logic.
+    ❌ Builds the workflow.
+    ❌ Calls LLM providers directly.
 
-        while (
-            artifact.review
-            and artifact.review.status == "FAIL"
-            and artifact.review_retry_count < MAX_REVIEW_RETRIES
-        ):
+Workflow:
 
-            logger.info(
-                f"{artifact.task_id} failed review. "
-                f"Correction attempt "
-                f"{artifact.review_retry_count + 1}/"
-                f"{MAX_REVIEW_RETRIES}"
-            )
+    User Requirement
+            │
+            ▼
+    Create WorkflowState
+            │
+            ▼
+    WorkflowManager
+            │
+            ▼
+    Display Generated Artifacts
 
-            artifact = execution_agent.correct_task(
-                task,
-                self.state,
-                artifact
-            )
+==========================================================
+"""
+    def __init__(self, workflow_manager):
 
-            artifact = review_agent.review_artifact(
-                task,
-                artifact
-            )
+        self.workflow_manager = workflow_manager
 
-        return artifact    
 
-    def start(self,requirement): 
 
-        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        requirement_agent = self.registry.get("requirement")
-        intelligence_agent = self.registry.get("intelligence")
-        planner_agent = self.registry.get("planner")
-        execution_agent = self.registry.get("execution")
-        review_agent = self.registry.get("review")
+    def start(self,requirement: str) -> State:
 
-        self.state.requirement = requirement
-
-        # Requirement enters the workflow once
-        self.state = requirement_agent.run(self.state)
+    # -----------------------------------------
+    # Initialize workflow
+    # -----------------------------------------
+        workflow_state = WorkflowState(State())
+        workflow_state.app_state.requirement = requirement
+        phase="INITIAL_ANALYSIS"
         while True:
+            logger.info("")
+            logger.info("=" * 60)
+            logger.info(
+                f"Workflow Phase {phase} : "
+                f"{'Initial Analysis' if phase == "INITIAL_ANALYSIS" else 'Requirement Re-analysis'}")
+            logger.info("=" * 60)
 
-            # Analyze current requirement
-            self.state = intelligence_agent.run(self.state)
 
-            intelligence = self.state.requirement_intelligence
+            # -----------------------------------------
+            # Execute workflow
+            # -----------------------------------------
+
+            workflow_state = (self.workflow_manager.execute(workflow_state))
+            app_state = workflow_state.app_state
+            intelligence = (app_state.requirement_intelligence)
+
+            if intelligence is None:
+
+                raise RuntimeError(
+                    "Requirement Intelligence missing."
+                )
+
+            # -----------------------------------------
+            # Requirement ready
+            # -----------------------------------------
 
             if intelligence.status == "READY":
 
-                self.state = planner_agent.run(self.state)
+                return app_state
 
-                for task in self.state.plan.tasks:
-                    logger.info(
-                        f"{task.task_id} | "
-                        f"{task.capability} | "
-                        f"depends_on={task.depends_on}"
-                    )
+            # -----------------------------------------
+            # Requirement needs clarification
+            # -----------------------------------------
 
-                # ---------------------------------------------
-                # Execute dependency graph in waves
-                # ---------------------------------------------
+            if (intelligence.status== "NEEDS_CLARIFICATION"):
 
-                while len(self.state.artifacts) < len(self.state.plan.tasks):
+                self._collect_clarifications(workflow_state)
 
-                    ready_tasks = execution_agent.get_ready_tasks(
-                        self.state
-                    )
+                phase="RE_ANALYSIS"
 
-                    if not ready_tasks:
-                        raise RuntimeError(
-                            "Workflow cannot progress. "
-                            "Possible circular dependency, "
-                            "invalid dependency, or failed upstream task."
-                        )
+                logger.info("")
+                logger.info("Clarification received.")
+                logger.info("Restarting workflow analysis...\n")
 
-                    logger.info(
-                        "Ready tasks: "
-                        f"{[task.task_id for task in ready_tasks]}"
-                    )
+                continue
 
-                    # Generate all currently-ready tasks in parallel
-                    candidate_artifacts = (
-                        execution_agent.execute_tasks(
-                            ready_tasks,
-                            self.state
-                        )
-                    )
-
-                    # Review/correct each candidate
-                    for artifact in candidate_artifacts:
-
-                        task = next(
-                            task
-                            for task in ready_tasks
-                            if task.task_id == artifact.task_id
-                        )
-
-                        artifact = self._quality_check(
-                            task,
-                            artifact,
-                            execution_agent,
-                            review_agent
-                        )
-
-                        if (
-                            not artifact.review
-                            or artifact.review.status != "PASS"
-                        ):
-                            raise RuntimeError(
-                                f"{artifact.task_id} failed quality review "
-                                f"after {MAX_REVIEW_RETRIES} corrections."
-                            )
-
-                        # IMPORTANT:
-                        # Only approved artifacts enter State.
-                        self.state.artifacts[
-                            artifact.task_id
-                        ] = artifact
-
-                        logger.info(
-                            f"{artifact.task_id} approved and "
-                            f"available to dependent tasks"
-                        )
-
-                # ---------------------------------------------
-                # Publish approved artifacts
-                # ---------------------------------------------
-
-                for artifact in self.state.artifacts.values():
-
-                    print("\n" + "=" * 60)
-                    print(
-                        f"Generated Artifact: "
-                        f"{artifact.capability}"
-                    )
-                    print("=" * 60)
-
-                    print(artifact.content)
-
-                    self.artifact_manager.save(
-                        artifact,
-                        run_id
-                    )
-
-                break
-                                    
-                                    
-                
-                
-                
-            if intelligence.status not in { "READY","NEEDS_CLARIFICATION"}:
-                raise ValueError(f"Unknown requirement intelligence status: "f"{intelligence.status}")
+            raise RuntimeError(
+                 f"Unknown requirement status: {intelligence.status}")
 
 
-            if not intelligence.questions:
-                raise RuntimeError(
-                "Requirement requires clarification but no clarification questions were provided.")
 
-            clarification = ""
+    def _collect_clarifications(self,workflow_state: WorkflowState) -> None:
+        """
+    =====================================================
+    Collect clarification answers from the user and
+    update the current requirement.
+    =====================================================
+    """
 
-            for question in intelligence.questions:
+        app_state = workflow_state.app_state
 
-                answer = input(
-                    f"\n🤖 {question}\n>"
-                )
+        intelligence = app_state.requirement_intelligence
 
-                clarification += (
-                    question + " : " + answer + "\n"
-                )
+        if intelligence is None:
+            raise RuntimeError("Requirement Intelligence missing.")
 
-                self.conversation.add_answer(
-                    question,
-                    answer
-                )
+        for question in intelligence.questions:
 
-            requirement += (
-                "\n\nClarifications:\n"
-                + clarification
-            )
+            answer = input(f"\n🤖 {question}\n> ")
 
-            self.state.requirement = requirement
+            app_state.conversation.add_answer(question,answer)
 
-            logger.info("\nUpdated Requirement:")
-            logger.info("-" * 60)
-            logger.info(requirement)
-            logger.info("-" * 60)
+        app_state.requirement += (
+            "\n\nClarifications:\n"
+            + app_state.conversation.get_clarification_text()
+        )
 
-            logger.info(
-                "\nRe-analyzing requirement...\n"
-            )
+        logger.info("\nUpdated Requirement:")
+        logger.info("-" * 60)
+        logger.info(app_state.requirement)
+        logger.info("-" * 60)
 
-        return self.state
+

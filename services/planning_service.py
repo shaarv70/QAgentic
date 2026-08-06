@@ -1,17 +1,17 @@
 from models.task import Task
-from prompts.planning_prompt import build_planning_prompt 
+from prompts.planning_prompt import build_planning_prompt
 from models.plan import Plan
 
 
 class PlanningService:
-     
+
     def __init__(self,llm_service,available_capabilities):
-        
+
         self.llm_service=llm_service
         self.available_capabilities = available_capabilities
-    
-    
-    def create_plan(self,  requirement, intelligence):
+
+
+    def create_plan(self, requirement, intelligence):
 
         prompt = build_planning_prompt(requirement,intelligence,self.available_capabilities)
 
@@ -35,5 +35,5 @@ class PlanningService:
 
         plan.priority = response.get("priority", "MEDIUM")
         plan.parallel = response.get("parallel", True)
-        
+
         return plan
