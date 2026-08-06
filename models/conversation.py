@@ -1,5 +1,11 @@
 class Conversation:
 
+
+    requirement: str
+    questions: list[str]
+    answers: list[str]
+
+
     def __init__(self):              #constructor, elf means this
         self.requirement = ""
         self.questions = []
@@ -17,3 +23,23 @@ class Conversation:
             context += f"{q}\nAnswer: {a}\n\n"
 
         return context
+
+
+    def get_clarification_text(self) -> str:
+            """
+            Returns all clarification questions and answers
+            as formatted text.
+            """
+
+            clarification = ""
+
+            for question, answer in zip(
+                self.questions,
+                self.answers
+            ):
+
+                clarification += (
+                    f"{question} : {answer}\n"
+                )
+
+            return clarification

@@ -13,7 +13,7 @@ class RequirementIntelligenceAgent(BaseAgent):
 
     def execute(self, state):
 
-        intelligence = self.intelligence_service.analyze( state.requirement)
+        intelligence = self.intelligence_service.analyze(state.requirement)
 
         state.requirement_intelligence = intelligence
 

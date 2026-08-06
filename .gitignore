@@ -4,6 +4,8 @@
 # Python cache
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
 
 # Virtual environments
 venv/
@@ -26,3 +28,8 @@ Thumbs.db
 
 # Unrelated local project
 PythonPractice/
+
+
+# Test
+.pytest_cache/
+.coverage
