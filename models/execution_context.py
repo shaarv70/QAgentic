@@ -4,7 +4,7 @@ from models.artifact import Artifact
 class ExecutionContext:
 
 
-    equirement: str
+    requirement: str
     dependency_artifacts: dict[str,Artifact]
 
 

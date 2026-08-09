@@ -1,10 +1,15 @@
 from agents.supervisor_agent import SupervisorAgent
+from ai.builders.context_builder import ContextBuilder
+from ai.builders.prompt_builder import PromptBuilder
+from ai.services.pricing_service import PricingService
+from ai.token.token_manager import TokenManager
 from artifacts.artifact_manager import ArtifactManager
+from registries.agent_profile_registry import AgentProfileRegistry
 from registries.agent_registry import AgentRegistry
 from registries.node_registry import NodeRegistry
 from registries.provider_registry import ProviderRegistry
 from registries.tool_registry import ToolRegistry
-from services.llm_service import LLMService
+from ai.services.ai_service import AIService
 from workflow.langgraph_engine import LangGraphEngine
 from workflow.workflow_builder import WorkflowBuilder
 from workflow.workflow_manager import WorkflowManager
@@ -62,34 +67,30 @@ Object Graph:
 
         provider_registry = ProviderRegistry()
 
-        llm_service = LLMService(provider_registry)
+        profile_registry = AgentProfileRegistry()
 
-        tool_registry = ToolRegistry(llm_service)
+        pricing_service = PricingService()
 
-        agent_registry = AgentRegistry(
-            tool_registry,
-            llm_service
-        )
+        context_builder = ContextBuilder()
+
+        prompt_builder = PromptBuilder(context_builder)
+
+        token_manager = TokenManager()
+
+        ai_service = AIService(provider_registry,profile_registry,token_manager,pricing_service)
+
+        tool_registry = ToolRegistry(ai_service,prompt_builder)
+
+        agent_registry = AgentRegistry(tool_registry,ai_service,prompt_builder)
 
         artifact_manager = ArtifactManager()
 
-        node_registry = NodeRegistry(
-            agent_registry,
-            artifact_manager
-        )
+        node_registry = NodeRegistry(agent_registry,artifact_manager)
 
-        workflow_builder = WorkflowBuilder(
-            node_registry
-        )
+        workflow_builder = WorkflowBuilder(node_registry)
 
-        workflow_engine = LangGraphEngine(
-            workflow_builder
-        )
+        workflow_engine = LangGraphEngine(workflow_builder)
 
-        workflow_manager = WorkflowManager(
-            workflow_engine
-        )
+        workflow_manager = WorkflowManager(workflow_engine)
 
-        return SupervisorAgent(
-            workflow_manager
-        )
+        return SupervisorAgent(workflow_manager)
