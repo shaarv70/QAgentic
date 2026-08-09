@@ -19,41 +19,34 @@ class ExecutionAgent(BaseAgent):
         return state
 
 
-    
+
 
     def execute_task(self, task, state):
 
         start = time.perf_counter()
 
-        generator = self.tool_registry.get(
-            task.capability
-        )
+        generator = self.tool_registry.get(task.capability)
 
-        artifact = Artifact(
-            task_id=task.task_id,
-            capability=task.capability
-        )
+        artifact = Artifact(task_id=task.task_id,capability=task.capability)
 
         logger.info(f"Started {task.task_id}: {task.description}")
         dependency_artifacts = {}
         for dependency_id in task.depends_on:
-        
-                        dependency_artifact = state.artifacts.get(
-                            dependency_id
-                        )
-        
-                        if dependency_artifact is None:
+
+                dependency_artifact = state.artifacts.get(dependency_id)
+
+                if dependency_artifact is None:
                             raise RuntimeError(
                                 f"{task.task_id} requires "
                                 f"{dependency_id}, but its artifact "
                                 f"is unavailable."
                             )
-        
-                        dependency_artifacts[dependency_id] = dependency_artifact.content
-                        
+
+                dependency_artifacts[dependency_id] = dependency_artifact.content
+
         execution_context = ExecutionContext(requirement=state.requirement,dependency_artifacts=dependency_artifacts)
         for attempt in range(MAX_EXECUTION_RETRIES):
-           
+
             try:
 
                 result = generator.generate(task,execution_context)
@@ -89,17 +82,15 @@ class ExecutionAgent(BaseAgent):
 
         artifact.status = "FAILED"
 
-        artifact.execution_time = (
-            time.perf_counter() - start
-        )
+        artifact.execution_time = (time.perf_counter() - start)
 
         raise RuntimeError(
             f"{task.task_id} failed after "
             f"{MAX_EXECUTION_RETRIES} retries"
         )
-        
-        
-        
+
+
+
     def correct_task(self, task, state, artifact):
 
         start = time.perf_counter()
@@ -131,9 +122,7 @@ class ExecutionAgent(BaseAgent):
                     f"is unavailable during correction."
                 )
 
-            dependency_artifacts[
-                dependency_id
-            ] = dependency_artifact.content
+            dependency_artifacts[dependency_id] = dependency_artifact.content
 
         execution_context = ExecutionContext(
             requirement=state.requirement,
@@ -186,11 +175,11 @@ class ExecutionAgent(BaseAgent):
             f"{task.task_id} correction failed after "
             f"{MAX_EXECUTION_RETRIES} execution retries"
         )
-        
-        
-        
-    
-                    
+
+
+
+
+
     def get_ready_tasks(self, state):
 
         ready_tasks = []
@@ -212,10 +201,10 @@ class ExecutionAgent(BaseAgent):
             if dependencies_ready:
                 ready_tasks.append(task)
 
-        return ready_tasks               
-    
-    
-    
+        return ready_tasks
+
+
+
     def execute_tasks(self, tasks, state):
 
         artifacts = []
@@ -251,4 +240,4 @@ class ExecutionAgent(BaseAgent):
 
                     raise
 
-        return artifacts                
+        return artifacts

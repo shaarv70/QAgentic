@@ -1,30 +1,29 @@
-import json
+def build_summary_prompt(task_context, requirement_context):
 
 
-def build_summary_prompt(task, requirement):
-
-    context = json.dumps(
-        task.context,
-        indent=2
-    )
-
-    return f"""
+    system_prompt = """
 You are a Senior QA Analyst.
-
-Requirement:
-{requirement}
-
-Task:
-{task.description}
-
-Context:
-{context}
 
 Generate the summary requested by the task.
 
-Base the summary on the requirement, task description, and available context.
+Base the summary on the requirement, task description, and
+available context.
 
-Do not invent details that are not supported by the provided information.
+Do not invent details that are not supported by the provided
+information.
 
 Return the summary only.
 """
+
+    user_prompt = f"""
+REQUIREMENT:
+
+{requirement_context}
+
+
+TASK CONTEXT:
+
+{task_context}
+"""
+
+    return system_prompt, user_prompt

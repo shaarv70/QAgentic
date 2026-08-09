@@ -1,16 +1,17 @@
-def build_review_prompt(task, artifact):
+def build_review_prompt(
+    task_context,
+    artifact_context,):
+    """
+    Build the review prompt using context already prepared
+    by ContextBuilder.
 
-    return f"""
-You are a Senior QA Artifact Reviewer.
+    The prompt function must not access domain objects directly.
+    """
 
-Task:
-{task.description}
+    system_prompt = """
+You are a Senior QA Reviewer.
 
-Task Context:
-{task.context}
-
-Generated Artifact:
-{artifact.content}
+Review the generated artifact against the task that was requested.
 
 Review the artifact for:
 
@@ -62,22 +63,6 @@ explicitly stated in the requirement.
 However, the expected result must not invent specific
 application behavior that is unknown.
 
-Example:
-
-Scenario:
-Attempt to update cart quantity to an invalid value.
-
-Valid expected result:
-The invalid input must not result in an accepted invalid cart state.
-
-Unsupported expected result:
-"Quantity must be at least 1" is displayed.
-
-unless that exact behavior is provided by the requirement or context.
-
-FAIL when an artifact presents unsupported application behavior
-as an expected result or confirmed fact.
-
 UNCERTAIN EXPECTED RESULTS:
 
 A functional test case must have a clear and verifiable expected result.
@@ -108,17 +93,17 @@ Return exactly one valid JSON object.
 
 PASS:
 
-{{
+{
     "status": "PASS",
     "feedback": ""
-}}
+}
 
 FAIL:
 
-{{
+{
     "status": "FAIL",
     "feedback": "Specific issues that must be corrected"
-}}
+}
 
 Rules:
 
@@ -129,3 +114,15 @@ Rules:
 - Do not provide reasoning outside the JSON.
 - Do not write anything before or after the JSON.
 """
+
+    user_prompt = f"""
+TASK:
+
+{task_context}
+
+GENERATED ARTIFACT:
+
+{artifact_context}
+"""
+
+    return system_prompt, user_prompt
