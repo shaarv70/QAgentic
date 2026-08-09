@@ -23,27 +23,9 @@ def build_planning_prompt(
         indent=2
     )
 
-    return f"""
+    system_prompt = """
 You are a Senior Technical Planner responsible for creating the smallest valid
 execution plan for an AI Agent Framework.
-
-====================================================================
-REQUIREMENT
-====================================================================
-
-{requirement}
-
-====================================================================
-REQUIREMENT ANALYSIS
-====================================================================
-
-{intelligence_json}
-
-====================================================================
-AVAILABLE CAPABILITIES
-====================================================================
-
-{capabilities_json}
 
 ====================================================================
 PLANNING OBJECTIVE
@@ -150,18 +132,18 @@ Return ONLY valid JSON.
 
 Example:
 
-{{
+{
     "tasks": [
-        {{
+        {
             "capability": "summary",
             "description": "Generate Java Hello World source code.",
-            "context": {{}},
+            "context": {},
             "depends_on": []
-        }}
+        }
     ],
     "priority": "LOW",
     "parallel": true
-}}
+}
 
 ====================================================================
 PLANNING EXAMPLES
@@ -175,18 +157,18 @@ Generate Java Hello World program.
 
 Output
 
-{{
+{
     "tasks": [
-        {{
+        {
             "capability": "summary",
             "description": "Generate Java Hello World source code.",
-            "context": {{}},
+            "context": {},
             "depends_on": []
-        }}
+        }
     ],
     "priority": "LOW",
     "parallel": true
-}}
+}
 
 ------------------------------------------------------------
 
@@ -198,18 +180,18 @@ Generate REST API test cases.
 
 Output
 
-{{
+{
     "tasks": [
-        {{
+        {
             "capability": "testcase",
             "description": "Generate REST API functional test cases.",
-            "context": {{}},
+            "context": {},
             "depends_on": []
-        }}
+        }
     ],
     "priority": "MEDIUM",
     "parallel": true
-}}
+}
 
 ------------------------------------------------------------
 
@@ -221,24 +203,24 @@ Generate REST API test cases and automate them.
 
 Output
 
-{{
+{
     "tasks": [
-        {{
+        {
             "capability": "testcase",
             "description": "Generate REST API functional test cases.",
-            "context": {{}},
+            "context": {},
             "depends_on": []
-        }},
-        {{
+        },
+        {
             "capability": "automation",
             "description": "Automate the generated REST API test cases.",
-            "context": {{}},
+            "context": {},
             "depends_on": ["task_1"]
-        }}
+        }
     ],
     "priority": "HIGH",
     "parallel": false
-}}
+}
 
 ====================================================================
 OUTPUT RULES
@@ -256,3 +238,25 @@ Do NOT include:
 
 Return ONLY the JSON object.
 """
+
+    user_prompt = f"""
+====================================================================
+REQUIREMENT
+====================================================================
+
+{requirement}
+
+====================================================================
+REQUIREMENT ANALYSIS
+====================================================================
+
+{intelligence_json}
+
+====================================================================
+AVAILABLE CAPABILITIES
+====================================================================
+
+{capabilities_json}
+"""
+
+    return system_prompt, user_prompt

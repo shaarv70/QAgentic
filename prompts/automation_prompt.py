@@ -1,36 +1,12 @@
-import json
-
-
 def build_automation_prompt(
-    task,
-    requirement,
-    dependency_artifacts
+    requirement_context,
+    task_context,
+    dependency_context
 ):
 
-    context = json.dumps(
-        task.context,
-        indent=2
-    )
 
-    dependencies = json.dumps(
-        dependency_artifacts,
-        indent=2
-    )
-
-    return f"""
+    system_prompt = """
 You are a Senior Automation Test Engineer.
-
-Original Requirement:
-{requirement}
-
-Automation Task:
-{task.description}
-
-Task Context:
-{context}
-
-Approved Upstream Artifacts:
-{dependencies}
 
 Generate automation for the approved upstream test cases.
 
@@ -57,3 +33,20 @@ of duplicating code unnecessarily.
 
 Return ONLY the automation artifact.
 """
+
+    user_prompt = f"""
+ORIGINAL REQUIREMENT:
+
+{requirement_context}
+
+AUTOMATION TASK:
+
+{task_context}
+
+
+APPROVED UPSTREAM ARTIFACTS:
+
+{dependency_context}
+"""
+
+    return system_prompt, user_prompt

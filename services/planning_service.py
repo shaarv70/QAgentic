@@ -1,3 +1,6 @@
+from ai.builders.prompt_builder import PromptBuilder
+from ai.models.llm_request import LLMRequest
+from constants.agent_names import AgentNames
 from models.task import Task
 from prompts.planning_prompt import build_planning_prompt
 from models.plan import Plan
@@ -5,17 +8,20 @@ from models.plan import Plan
 
 class PlanningService:
 
-    def __init__(self,llm_service,available_capabilities):
+    def __init__(self,ai_service,available_capabilities,prompt_builder:PromptBuilder):
 
-        self.llm_service=llm_service
+        self.ai_service=ai_service
         self.available_capabilities = available_capabilities
+        self.prompt_builder=prompt_builder
 
 
     def create_plan(self, requirement, intelligence):
 
-        prompt = build_planning_prompt(requirement,intelligence,self.available_capabilities)
+        system_prompt, user_prompt = self.prompt_builder.planner(requirement,intelligence,self.available_capabilities,)
 
-        response = self.llm_service.ask_llm_json(prompt)
+        request = LLMRequest(system_prompt=system_prompt,user_prompt=user_prompt)
+
+        response = self.ai_service.generate_json(AgentNames.PLANNER,request)
 
         plan = Plan()
 

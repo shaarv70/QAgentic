@@ -1,4 +1,10 @@
-class BaseRegistry:
+from typing import Generic, TypeVar
+
+T = TypeVar("T")
+
+
+
+class BaseRegistry(Generic[T]):
     """
     ==========================================================
     Class : BaseRegistry
@@ -18,11 +24,11 @@ class BaseRegistry:
     """
     def __init__(self):
 
-        self._items: dict[str, object] = {}
+        self._items: dict[str, T] = {}
 
 
 
-    def register(self,name: str,item: object) -> None:
+    def register(self,name: str,item: T) -> None:
 
         if name in self._items:
             raise ValueError(f"{name} already registered.")
@@ -32,7 +38,7 @@ class BaseRegistry:
 
 
 
-    def get(self, name:str)->object:
+    def get(self, name:str)-> T:
 
         if name not in self._items:
              raise ValueError( f"Registry entry '{name}' not found.")

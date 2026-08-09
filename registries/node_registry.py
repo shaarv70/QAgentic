@@ -17,7 +17,7 @@ from workflow.constants import (
 
 
 
-class NodeRegistry(BaseRegistry):
+class NodeRegistry(BaseRegistry[BaseWorkflowNode]):
 
     """
     ==========================================================

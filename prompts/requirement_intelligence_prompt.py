@@ -1,13 +1,10 @@
 def build_requirement_intelligence_prompt(requirement):
 
-    return f"""
+    system_prompt = """
 You are a Senior QA Requirement Analyst.
 
 Analyze the user's requirement so downstream QA agents can work
 with accurate and grounded information.
-
-Requirement:
-{requirement}
 
 Return ONLY valid JSON in this format:
 
@@ -143,7 +140,6 @@ unless the user's requested task specifically depends on those details.
 The downstream QA generator can produce reasonable generic coverage
 without inventing unknown application-specific behavior.
 
-
 UNKNOWN INFORMATION:
 
 If the requirement contains previous clarification answers indicating
@@ -182,5 +178,16 @@ prefer READY when a useful and grounded QA artifact can still
 be generated.
 
 Return only JSON.
+
 Do not return markdown or explanations.
 """
+
+    user_prompt = f"""
+Analyze the following requirement.
+
+Requirement:
+
+{requirement}
+"""
+
+    return system_prompt, user_prompt

@@ -1,20 +1,22 @@
 from registries.base_registry import BaseRegistry
 from services.automation_service import AutomationGenerator
+from services.base_generator import BaseGenerator
 from services.database_service import DatabaseGenerator
 from services.summary_service import SummaryGenerator
 from services.testcase_service import TestCaseGenerator
 
 
 
-class ToolRegistry(BaseRegistry):
+class ToolRegistry(BaseRegistry[BaseGenerator]):
 
-    
 
-   def __init__(self,llm_service):
+
+   def __init__(self,ai_service,prompt_builder):
 
         super().__init__()
 
-        self.llm_service = llm_service
+        self.ai_service = ai_service
+        self.prompt_builder = prompt_builder
 
         self._register_default_tools()
 
@@ -26,22 +28,18 @@ class ToolRegistry(BaseRegistry):
 
         self.register(
             "testcase",
-            TestCaseGenerator(self.llm_service)
-        )
+            TestCaseGenerator(self.ai_service,self.prompt_builder,))
 
         self.register(
             "automation",
-            AutomationGenerator(self.llm_service)
-        )
+            AutomationGenerator(self.ai_service,self.prompt_builder,))
 
         self.register(
             "database",
-            DatabaseGenerator(self.llm_service)
-        )
+            DatabaseGenerator(self.ai_service,self.prompt_builder,))
 
         self.register(
             "summary",
-            SummaryGenerator(self.llm_service)
-        )
+            SummaryGenerator(self.ai_service,self.prompt_builder,))
 
 

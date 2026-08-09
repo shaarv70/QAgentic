@@ -1,47 +1,13 @@
-import json
-
-
 def build_correction_prompt(
-    task,
-    requirement,
-    previous_content,
-    feedback,
-    dependency_artifacts=None
-):
+    task_context,
+    requirement_context,
+    previous_context,
+    feedback_context,
+    dependency_context=None):
 
-    context = json.dumps(
-        task.context,
-        indent=2
-    )
 
-    dependencies = json.dumps(
-        dependency_artifacts or {},
-        indent=2
-    )
-
-    return f"""
+    system_prompt = """
 You are a Senior QA Engineer.
-
-Requirement:
-{requirement}
-
-Task:
-{task.description}
-
-Capability:
-{task.capability}
-
-Context:
-{context}
-
-Approved Upstream Artifacts:
-{dependencies}
-
-Previous Artifact:
-{previous_content}
-
-Review Feedback:
-{feedback}
 
 The previous artifact failed quality review.
 
@@ -91,3 +57,28 @@ testable behavior. It does not require speculative scenarios.
 
 Return ONLY the corrected artifact.
 """
+
+    user_prompt = f"""
+REQUIREMENT:
+
+{requirement_context}
+
+
+TASK CONTEXT:
+
+{task_context}
+
+APPROVED UPSTREAM ARTIFACTS:
+
+{dependency_context}
+
+PREVIOUS ARTIFACT:
+
+{previous_context}
+
+REVIEW FEEDBACK:
+
+{feedback_context}
+"""
+
+    return system_prompt, user_prompt
