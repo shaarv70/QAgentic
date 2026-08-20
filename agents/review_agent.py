@@ -20,32 +20,22 @@ class ReviewAgent(BaseAgent):
                 if task.task_id == artifact.task_id
             )
 
-            self.review_artifact(
-                task,
-                artifact
-            )
+            self.review_artifact(task,artifact)
 
         return state
 
 
+
     def review_artifact(self, task, artifact):
 
-        review = self.review_service.review(
-            task,
-            artifact
-        )
+        review = self.review_service.review(task,artifact)
 
         artifact.review = review
 
-        logger.info(
-            f"{artifact.task_id} Review: "
-            f"{review.status}"
-        )
+        logger.info(f"{artifact.task_id} Review: "f"{review.status}")
+
         if artifact.review.status == "FAIL":
-        
-            logger.info(
-                f"{artifact.task_id} Feedback: "
-                f"{review.feedback}"
-            )
+
+            logger.info(f"{artifact.task_id} Feedback: "f"{review.feedback}")
 
         return artifact

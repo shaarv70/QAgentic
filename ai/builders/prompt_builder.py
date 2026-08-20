@@ -1,5 +1,7 @@
 from ai.builders.context_builder import ContextBuilder
 from ai.prompts.prompt_result import PromptResult
+from constants.agent_names import AgentNames
+from memory.memory_context_service import MemoryContextService
 from prompts.requirement_intelligence_prompt import (
     build_requirement_intelligence_prompt,
 )
@@ -32,20 +34,29 @@ class PromptBuilder:
     ==========================================================
     """
 
-    def __init__(self,context_builder: ContextBuilder,):
+    def __init__(self,context_builder: ContextBuilder,memory_context_service: MemoryContextService,):
 
         self.context_builder = context_builder
+        self.memory_context_service = memory_context_service
 
 
+    def _memory(self,agent_name: str,query_text: str,capability: str | None = None,) -> str:
+
+        return self.memory_context_service.build(
+        agent_name=agent_name,
+        query_text=query_text,
+        capability=capability,
+    )
 
     # ======================================================
     # Agent Prompts
     # ======================================================
 
-    def requirement_intelligence(self,requirement,)->PromptResult:
+    def requirement_intelligence(self,requirement, clarification_context="",)->PromptResult:
 
         requirement_context = (self.context_builder.requirement(requirement))
-        system_prompt, user_prompt = (build_requirement_intelligence_prompt(requirement_context))
+        memory_text = self._memory(AgentNames.REQUIREMENT_INTELLIGENCE,requirement,)
+        system_prompt, user_prompt = build_requirement_intelligence_prompt(requirement_context,memory_text,clarification_context,)
         return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)
 
 
@@ -53,9 +64,16 @@ class PromptBuilder:
     def planner(self,requirement,intelligence,available_capabilities,)->PromptResult:
 
         requirement_context = (self.context_builder.requirement(requirement))
-        intelligence_context = intelligence
+        intelligence_context = self.context_builder.requirement(
+        {
+        "intent": intelligence.intent,
+        "context": intelligence.context,
+        "assumptions": intelligence.assumptions,
+        "unknowns": intelligence.unknowns,})
         capabilities_context = (self.context_builder.requirement(available_capabilities))
-        system_prompt, user_prompt = build_planning_prompt(requirement_context,intelligence_context,capabilities_context,)
+        planner_memory_query = (f"{requirement} "f"{intelligence.intent}")
+        memory_text = self._memory(AgentNames.PLANNER,planner_memory_query)
+        system_prompt, user_prompt = build_planning_prompt(requirement_context,intelligence_context,capabilities_context,memory_text,)
         return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)
 
 
@@ -63,7 +81,9 @@ class PromptBuilder:
 
         task_context = self.context_builder.task(task)
         artifact_context = (self.context_builder.artifact(artifact))
-        system_prompt, user_prompt = build_review_prompt(task_context,artifact_context,)
+        review_memory_query = (f"{task.description} "f"{task.capability}")
+        memory_text = self._memory(AgentNames.REVIEW,review_memory_query,capability=task.capability,)
+        system_prompt, user_prompt = build_review_prompt(task_context,artifact_context,memory_text,)
         return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)
 
 
@@ -76,7 +96,8 @@ class PromptBuilder:
 
         task_context = self.context_builder.task(task)
         requirement_context = self.context_builder.requirement(requirement)
-        system_prompt, user_prompt=build_testcase_prompt(task_context,requirement_context,)
+        memory_text = self._memory(AgentNames.TESTCASE,task.description,capability=task.capability,)
+        system_prompt, user_prompt=build_testcase_prompt(task_context,requirement_context,memory_text)
         return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)
 
 
@@ -86,7 +107,8 @@ class PromptBuilder:
         task_context = self.context_builder.task(task)
         requirement_context = self.context_builder.requirement(requirement)
         dependency_context = (self.context_builder.artifacts(dependency_artifacts))
-        system_prompt, user_prompt =build_automation_prompt(requirement_context,task_context,dependency_context,)
+        memory_text = self._memory(AgentNames.AUTOMATION,task.description,capability=task.capability,)
+        system_prompt, user_prompt =build_automation_prompt(requirement_context,task_context,dependency_context, memory_text,)
         return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)
 
 
@@ -96,7 +118,8 @@ class PromptBuilder:
 
         task_context = self.context_builder.task(task)
         requirement_context = self.context_builder.requirement(requirement)
-        system_prompt, user_prompt = build_database_prompt(task_context,requirement_context,)
+        memory_text = self._memory(AgentNames.DATABASE,task.description,capability=task.capability,)
+        system_prompt, user_prompt = build_database_prompt(task_context,requirement_context,memory_text,)
         return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)
 
 
@@ -105,7 +128,8 @@ class PromptBuilder:
 
         task_context = self.context_builder.task(task)
         requirement_context = self.context_builder.requirement(requirement)
-        system_prompt, user_prompt = build_summary_prompt(task_context,requirement_context,)
+        memory_text =  self._memory(AgentNames.SUMMARY,task.description,capability=task.capability,)
+        system_prompt, user_prompt = build_summary_prompt(task_context,requirement_context,memory_text,)
         return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)
 
 
@@ -116,10 +140,12 @@ class PromptBuilder:
         previous_context = (self.context_builder.requirement(previous_content))
         feedback_context = (self.context_builder.requirement(feedback))
         dependency_context = (self.context_builder.artifacts(dependency_artifacts))
+        correction_memory_query = (f"{task.description} "f"{task.capability} "f"{feedback}")
+        memory_text = self._memory(AgentNames.CORRECTION,correction_memory_query,capability=task.capability,)
         system_prompt, user_prompt = build_correction_prompt(
             task_context,
             requirement_context,
             previous_context,
             feedback_context,
-            dependency_context,)
+            dependency_context,memory_text,)
         return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)

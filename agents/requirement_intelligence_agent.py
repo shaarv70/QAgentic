@@ -13,22 +13,20 @@ class RequirementIntelligenceAgent(BaseAgent):
 
     def execute(self, state):
 
-        intelligence = self.intelligence_service.analyze(state.requirement)
+        clarification_context = (state.conversation.get_clarification_text() if state.conversation else "")
+
+        intelligence = self.intelligence_service.analyze(state.requirement,clarification_context)
 
         state.requirement_intelligence = intelligence
 
-        logger.info(
-            f"Requirement Status: {intelligence.status}"
-        )
+        logger.info(f"Requirement Status: {intelligence.status}")
 
-        logger.info(
-            f"Intent: {intelligence.intent}"
-        )
+        logger.info(f"Intent: {intelligence.intent}")
 
         if intelligence.assumptions:
 
-            logger.info(
-                f"Assumptions: {intelligence.assumptions}"
-            )
+            logger.info(f"Assumptions: {intelligence.assumptions}")
+
+        if getattr(intelligence, "unknowns", None):logger.info(f"Unknowns: {intelligence.unknowns}")
 
         return state

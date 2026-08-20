@@ -9,10 +9,11 @@ import time
 
 class ExecutionAgent(BaseAgent):
 
-    def __init__(self, tool_registry):
+    def __init__(self, tool_registry,episode_service,):
 
         super().__init__()
         self.tool_registry = tool_registry
+        self.episode_service = episode_service
 
 
     def execute(self, state):
@@ -22,6 +23,8 @@ class ExecutionAgent(BaseAgent):
 
 
     def execute_task(self, task, state):
+
+        last_error = None
 
         start = time.perf_counter()
 
@@ -45,6 +48,7 @@ class ExecutionAgent(BaseAgent):
                 dependency_artifacts[dependency_id] = dependency_artifact.content
 
         execution_context = ExecutionContext(requirement=state.requirement,dependency_artifacts=dependency_artifacts)
+
         for attempt in range(MAX_EXECUTION_RETRIES):
 
             try:
@@ -69,6 +73,7 @@ class ExecutionAgent(BaseAgent):
 
             except Exception as e:
 
+                last_error = str(e)
                 artifact.retry_count = attempt + 1
 
                 logger.warning(
@@ -79,10 +84,14 @@ class ExecutionAgent(BaseAgent):
                     f"{task.task_id} Retry {attempt + 1}"
                 )
 
-
+        
         artifact.status = "FAILED"
 
         artifact.execution_time = (time.perf_counter() - start)
+
+        failure_reason = ( last_error or f"Task failed after " f"{MAX_EXECUTION_RETRIES} execution retries")
+
+        self.episode_service.capture_failure(state,task,artifact,failure_reason,)
 
         raise RuntimeError(
             f"{task.task_id} failed after "
