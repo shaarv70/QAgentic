@@ -13,13 +13,14 @@ from services.review_service import ReviewService
 
 class AgentRegistry(BaseRegistry[BaseAgent]):
 
-    def __init__(self, tool_registry, ai_service,prompt_builder:PromptBuilder):
+    def __init__(self, tool_registry, ai_service,prompt_builder:PromptBuilder,episode_service,):
 
         super().__init__()
 
         self.tool_registry = tool_registry
         self.ai_service = ai_service
         self.prompt_builder=prompt_builder
+        self.episode_service = episode_service
         self.available_capabilities = (self.tool_registry.get_registered_names())
         self._register_default_agents()
 
@@ -46,7 +47,7 @@ class AgentRegistry(BaseRegistry[BaseAgent]):
 
         self.register(
             "execution",
-            ExecutionAgent(self.tool_registry)
+            ExecutionAgent(self.tool_registry,self.episode_service)
         )
 
         self.register(

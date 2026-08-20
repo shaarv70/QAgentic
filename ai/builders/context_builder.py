@@ -1,5 +1,9 @@
 import json
 
+from memory.memory_manager import MemoryManager
+from memory.models.memory_context import MemoryContext
+from memory.models.memory_query import MemoryQuery
+
 
 class ContextBuilder:
     """
@@ -14,14 +18,13 @@ class ContextBuilder:
         - Serialize structured context
         - Keep serialization logic outside prompt files
 
-    Future:
-        - RAG context
-        - Repository context
-        - Execution memory
-        - Previous attempts
-        - Retrieved documents
-    ==========================================================
     """
+
+    def __init__(self,memory_manager: MemoryManager | None = None,):
+
+        self.memory_manager = memory_manager
+
+
 
     @staticmethod
     def _serialize(value) -> str:
@@ -102,6 +105,7 @@ class ContextBuilder:
             indent=2,
             ensure_ascii=False,)
 
+
     @staticmethod
     def requirement(requirement) -> str:
         """
@@ -109,6 +113,8 @@ class ContextBuilder:
         """
 
         return ContextBuilder._serialize(requirement)
+
+
 
     @staticmethod
     def artifacts(artifacts) -> str:
@@ -120,3 +126,34 @@ class ContextBuilder:
             return "{}"
 
         return ContextBuilder._serialize(artifacts)
+
+
+
+
+    def build_memory_context(self,query: MemoryQuery,) -> MemoryContext:
+
+        if self.memory_manager is None:
+            return MemoryContext()
+
+        memories = self.memory_manager.retrieve(query)
+
+        return MemoryContext(
+            memories=memories
+        )
+
+
+
+
+    @staticmethod
+    def memory(memory_context: MemoryContext) -> str:
+        """
+        Convert retrieved memory into compact prompt context.
+        """
+
+        if memory_context.is_empty:
+            return ""
+
+        return "\n".join(
+        memory.content
+        for memory in memory_context.memories
+    )

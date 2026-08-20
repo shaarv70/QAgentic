@@ -35,7 +35,8 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
             agent_name=AgentNames.REQUIREMENT_INTELLIGENCE,
             model="openai/gpt-oss-120b",
             temperature=0.1,
-            response_format="json"
+            response_format="json",
+            max_output_tokens=2000
         ))
 
         self.register(
@@ -44,7 +45,8 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
             agent_name=AgentNames.PLANNER,
             model="openai/gpt-oss-120b",
             temperature=0.2,
-            response_format="json"
+            response_format="json",
+            max_output_tokens=1200
         ))
 
 
@@ -53,7 +55,8 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
         AgentProfile(
             agent_name=AgentNames.EXECUTION,
             model="openai/gpt-oss-120b",
-            temperature=0.2
+            temperature=0.2,
+            max_output_tokens=2000
         ))
 
 
@@ -63,7 +66,8 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
             agent_name=AgentNames.REVIEW,
             model="openai/gpt-oss-120b",
             temperature=0.1,
-            response_format="json"
+            response_format="json",
+            max_output_tokens=800
         ))
 
         self.register(
@@ -71,7 +75,8 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
         AgentProfile(
             agent_name=AgentNames.CORRECTION,
             model="openai/gpt-oss-120b",
-            temperature=0.2
+            temperature=0.2,
+            max_output_tokens=2500
         ))
 
 
@@ -81,6 +86,7 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
             agent_name=AgentNames.SUMMARY,
             model="openai/gpt-oss-120b",
             temperature=0.2,
+            max_output_tokens=1000
         ))
 
         self.register(
@@ -89,6 +95,7 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
             agent_name=AgentNames.TESTCASE,
             model="openai/gpt-oss-120b",
             temperature=0.2,
+            max_output_tokens=2500
         ))
 
 
@@ -98,6 +105,7 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
             agent_name=AgentNames.AUTOMATION,
             model="openai/gpt-oss-120b",
             temperature=0.2,
+            max_output_tokens=4000
         ))
 
 
@@ -108,4 +116,5 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
             agent_name=AgentNames.DATABASE,
             model="openai/gpt-oss-120b",
             temperature=0.2,
+            max_output_tokens=2500
         ))

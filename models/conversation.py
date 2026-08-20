@@ -1,45 +1,41 @@
 class Conversation:
 
-
-    requirement: str
-    questions: list[str]
-    answers: list[str]
-
-
-    def __init__(self):              #constructor, elf means this
+    def __init__(self):
         self.requirement = ""
-        self.questions = []
-        self.answers = []
+        self.clarification_state = {}
 
-    def add_answer(self, question, answer):
-        self.questions.append(question)
-        self.answers.append(answer)
 
-    def get_context(self):
 
-        context = self.requirement + "\n\n"
+    def add_answer(
+        self,
+        key: str,
+        question: str,
+        answer: str,
+    ):
+        self.clarification_state[key] = {
+            "key": key,
+            "question": question,
+            "answer": answer,
+        }
 
-        for q, a in zip(self.questions, self.answers):     #zip is used to iterate multiple collection at same time
-            context += f"{q}\nAnswer: {a}\n\n"
+    def has_key(self, key: str) -> bool:
+        return key in self.clarification_state
 
-        return context
+
+
+    def get_clarification_state(self) -> list[dict]:
+        return list(self.clarification_state.values())
+
 
 
     def get_clarification_text(self) -> str:
-            """
-            Returns all clarification questions and answers
-            as formatted text.
-            """
 
-            clarification = ""
+        if not self.clarification_state:
+            return ""
 
-            for question, answer in zip(
-                self.questions,
-                self.answers
-            ):
-
-                clarification += (
-                    f"{question} : {answer}\n"
-                )
-
-            return clarification
+        return "\n\n".join(
+            f"KEY: {item['key']}\n"
+            f"QUESTION: {item['question']}\n"
+            f"ANSWER: {item['answer']}\n"
+            for item in self.clarification_state.values()
+        )

@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from utils.logger import logger
+
 
 @dataclass(slots=True)
 class PromptResult:
@@ -22,3 +24,4 @@ class PromptResult:
         """
         yield self.system_prompt
         yield self.user_prompt
+        logger.info(self.user_prompt)

@@ -40,10 +40,10 @@ Workflow:
 
 ==========================================================
 """
-    def __init__(self, workflow_manager):
+    def __init__(self, workflow_manager ,episode_service,):
 
         self.workflow_manager = workflow_manager
-
+        self.episode_service = episode_service
 
 
     def start(self,requirement: str) -> State:
@@ -83,6 +83,7 @@ Workflow:
 
             if intelligence.status == "READY":
 
+                self.episode_service.capture_execution(app_state)
                 return app_state
 
             # -----------------------------------------
@@ -101,8 +102,7 @@ Workflow:
 
                 continue
 
-            raise RuntimeError(
-                 f"Unknown requirement status: {intelligence.status}")
+            raise RuntimeError(f"Unknown requirement status: {intelligence.status}")
 
 
 
@@ -121,20 +121,24 @@ Workflow:
         if intelligence is None:
             raise RuntimeError("Requirement Intelligence missing.")
 
-        for question in intelligence.questions:
+        conversation = app_state.conversation
+
+        if conversation is None:
+            raise RuntimeError("Conversation state missing.")
+
+        for clarification in intelligence.questions:
+
+            key = clarification["key"]
+            question = clarification["question"]
+
+            if conversation.has_key(key):
+
+                logger.warning("Skipping previously resolved clarification | "f"key={key}")
+
+                continue
 
             answer = input(f"\n🤖 {question}\n> ")
 
-            app_state.conversation.add_answer(question,answer)
-
-        app_state.requirement += (
-            "\n\nClarifications:\n"
-            + app_state.conversation.get_clarification_text()
-        )
-
-        logger.info("\nUpdated Requirement:")
-        logger.info("-" * 60)
-        logger.info(app_state.requirement)
-        logger.info("-" * 60)
+            conversation.add_answer( key=key,question=question,answer=answer,)
 
 

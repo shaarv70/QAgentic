@@ -20,3 +20,5 @@ class AgentProfile:
     temperature: float = 0.2
 
     response_format: str = "text"
+
+    max_output_tokens: int = 2048
