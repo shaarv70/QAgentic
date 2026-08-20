@@ -1,5 +1,6 @@
 import os
 from groq import Groq
+from ai.exceptions.ai_exception import AIRateLimitError
 from ai.models.llm_request import LLMRequest
 from ai.models.llm_response import LLMResponse
 from ai.profiles.agent_profile import AgentProfile
@@ -22,8 +23,7 @@ class  GroqProvider(BaseProvider):
     Pricing and cost calculation are handled outside the provider.
     """
 
-    def __init__(self):
-        self.model = "openai/gpt-oss-120b"
+
 
 
 
@@ -59,10 +59,11 @@ class  GroqProvider(BaseProvider):
             )
 
         client = Groq(api_key=api_key)
-
-        response = client.chat.completions.create(
+        try:
+            response = client.chat.completions.create(
             model=profile.model,
             temperature=profile.temperature,
+            max_tokens=profile.max_output_tokens,
             messages=[
                 {
                     "role": "system",
@@ -74,6 +75,29 @@ class  GroqProvider(BaseProvider):
                 },
             ],
         )
+        except Exception as ex:
+            if getattr(ex, "status_code", None) == 429:
+                retry_after = None
+
+                response = getattr(ex, "response", None)
+
+                if response is not None:
+                    headers = getattr(response, "headers", {})
+
+                    retry_value = headers.get("retry-after")
+
+                    if retry_value:
+                        try:
+                            retry_after = float(retry_value)
+                        except (TypeError, ValueError):
+                            retry_after = None
+
+                raise AIRateLimitError(
+                    "LLM provider rate limit exceeded.",
+                    retry_after=retry_after,
+                ) from ex
+
+            raise
 
         content = response.choices[0].message.content
 

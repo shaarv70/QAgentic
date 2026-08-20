@@ -45,13 +45,15 @@ This class NEVER:
     connecting the registered nodes.
     """
 
-    def __init__(self,agent_registry,artifact_manager):
+    def __init__(self,agent_registry,artifact_manager, episode_service,):
 
         super().__init__()
 
         self.agent_registry = agent_registry
 
         self.artifact_manager = artifact_manager
+
+        self.episode_service = episode_service
 
         self._register_default_nodes()
 
@@ -82,7 +84,7 @@ This class NEVER:
 
         self.register(
             EXECUTION,
-            ExecutionWorkflowNode(self.agent_registry)
+            ExecutionWorkflowNode(self.agent_registry , self.episode_service)
         )
 
         self.register(

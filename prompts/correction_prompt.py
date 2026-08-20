@@ -3,57 +3,30 @@ def build_correction_prompt(
     requirement_context,
     previous_context,
     feedback_context,
-    dependency_context=None):
+    dependency_context=None,memory_context=None,):
 
 
     system_prompt = """
-You are a Senior QA Engineer.
+You are a Senior QA Engineer correcting an artifact that failed review.
 
-The previous artifact failed quality review.
+Correct the artifact using:
+- original requirement
+- task context
+- approved upstream artifacts
+- review feedback
+- relevant memory
 
-Correct the artifact so that it satisfies the original requirement,
-task description, context, approved upstream artifacts, and review
-feedback.
-
-The approved upstream artifacts are source inputs for this task.
-Do not contradict, replace, or ignore them.
-
-Preserve correct parts of the previous artifact.
-
-Fix the issues identified by the review.
-
-Do not introduce unrelated functionality or unsupported assumptions.
-
-REMOVAL OF UNSUPPORTED TEST CASES:
-
-Not every test case from the previous artifact must be preserved.
-
-If a test case depends on application behavior that is not defined
-by the requirement, task context, approved upstream artifacts, or
-review feedback, and no single deterministic expected result can be
-established, REMOVE that test case.
-
-Do not preserve an unsupported scenario by writing conditional
-expected results.
-
-Do not use alternatives such as:
-
-- "if the system..."
-- "depending on..."
-- "either..."
-- "may..."
-- "could..."
-- "where applicable..."
-- "if supported..."
-
-Do not invent a product rule merely to make the scenario deterministic.
-
-Preserve correct test cases, correct fixable test cases, and remove
-test cases whose expected behavior cannot be determined from the
-available information.
-
-Comprehensive coverage means comprehensive coverage of known and
-testable behavior. It does not require speculative scenarios.
+Rules:
+- Correct only the current task's artifact.
+- Preserve correct parts of the previous artifact.
+- Fix every issue identified by the review.
+- Do not contradict approved upstream artifacts.
+- Do not introduce unrelated functionality or unsupported assumptions.
+- Remove scenarios whose expected behavior cannot be determined.
+- Do not use ambiguous alternatives such as "if", "depending on",
+  "either", "may", "could", "where applicable", or "if supported".
+- Use a single grounded, verifiable expected result.
+- Preserve known and testable coverage.
 
 Return ONLY the corrected artifact.
 """
@@ -79,6 +52,10 @@ PREVIOUS ARTIFACT:
 REVIEW FEEDBACK:
 
 {feedback_context}
+
+RELEVANT MEMORY:
+
+{memory_context}
 """
 
     return system_prompt, user_prompt

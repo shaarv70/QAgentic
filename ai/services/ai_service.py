@@ -1,4 +1,5 @@
 import json
+from ai.exceptions.ai_exception import AIRateLimitError
 from ai.services.pricing_service import PricingService
 from ai.token.token_manager import TokenManager
 from ai.models.llm_request import LLMRequest
@@ -7,6 +8,7 @@ from registries.agent_profile_registry import AgentProfileRegistry
 from config import LLM_PROVIDER
 from registries.provider_registry import ProviderRegistry
 from utils.logger import logger
+import time
 
 
 class AIService:
@@ -20,7 +22,7 @@ class AIService:
         self.pricing_service = pricing_service
 
 
-  
+
     def generate(self,agent_name: str,request: LLMRequest) -> LLMResponse:
 
         profile = self.profile_registry.get(agent_name)
@@ -31,7 +33,11 @@ class AIService:
 
         provider = self.provider_registry.get(LLM_PROVIDER)
 
-        response= provider.generate(request=request,profile=profile)
+        response=  self._generate_with_retry(
+    provider=provider,
+    request=request,
+    profile=profile,
+)
 
         if response.token_usage:
             usage = response.token_usage
@@ -60,5 +66,48 @@ class AIService:
                 f"Invalid JSON returned by LLM:\n{response.content}"
             ) from ex
 
+
+
+
+    def _generate_with_retry(
+    self,
+    provider,
+    request: LLMRequest,
+    profile,
+) -> LLMResponse:
+
+        max_attempts = 3
+
+        for attempt in range(max_attempts):
+
+            try:
+                return provider.generate(
+                    request=request,
+                    profile=profile,
+                )
+
+            except AIRateLimitError as ex:
+
+                if attempt == max_attempts - 1:
+                    raise
+
+                delay = ex.retry_after
+
+                if delay is None:
+                    delay = 2 ** attempt
+
+                logger.warning(
+                    "LLM rate limit | "
+                    "attempt=%d/%d | retry_in=%.2fs",
+                    attempt + 1,
+                    max_attempts,
+                    delay,
+                )
+
+                time.sleep(delay)
+
+        raise RuntimeError(
+            "LLM generation failed after retry attempts."
+        )
 
 

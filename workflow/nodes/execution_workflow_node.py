@@ -44,12 +44,12 @@ Reason:
 """
 
 
-    def __init__(self, agent_registry):
+    def __init__(self, agent_registry, episode_service,):
 
 
         self.execution_agent = agent_registry.get(EXECUTION)
         self.review_agent = agent_registry.get(REVIEW)
-
+        self.episode_service = episode_service
 
 
     def execute(self,state: WorkflowState) -> WorkflowState:
@@ -65,16 +65,9 @@ Reason:
 
             ready_tasks = self._fetch_ready_tasks(app_state)
 
-            candidate_artifacts = self._execute_ready_tasks(
-                ready_tasks,
-                app_state
-            )
+            candidate_artifacts = self._execute_ready_tasks(ready_tasks,app_state)
 
-            self._review_artifacts(
-                ready_tasks,
-                candidate_artifacts,
-                app_state
-            )
+            self._review_artifacts(ready_tasks,candidate_artifacts,app_state)
 
         return state
 
@@ -100,10 +93,7 @@ Reason:
                 "invalid dependency, or failed upstream task."
             )
 
-        logger.info(
-            "Ready tasks: "
-            f"{[task.task_id for task in ready_tasks]}"
-        )
+        logger.info("Ready tasks: "f"{[task.task_id for task in ready_tasks]}")
 
         return ready_tasks
 
@@ -115,12 +105,7 @@ Reason:
 
 
 
-    def _review_artifacts(
-        self,
-        ready_tasks,
-        candidate_artifacts,
-        state
-    ):
+    def _review_artifacts(self,ready_tasks,candidate_artifacts,state):
 
         for artifact in candidate_artifacts:
 
@@ -130,10 +115,7 @@ Reason:
                 if task.task_id == artifact.task_id
             )
 
-            artifact = self._quality_check(
-                task,
-                artifact,state
-            )
+            artifact = self._quality_check(task,artifact,state)
 
             if (
                 not artifact.review
@@ -155,11 +137,9 @@ Reason:
 
     def _quality_check(self,task,artifact,state):
 
-            artifact = self.review_agent.review_artifact(
-                task,
-                artifact
-            )
-
+            artifact = self.review_agent.review_artifact(task,artifact)
+            self.episode_service.capture_review(state,task,artifact)
+            
             while (
                 artifact.review
                 and artifact.review.status == "FAIL"
@@ -172,16 +152,11 @@ Reason:
                     f"{MAX_REVIEW_RETRIES}"
                 )
 
-                artifact = self.execution_agent.correct_task(
-                    task,
-                    state,
-                    artifact
-                )
+                self.episode_service.capture_correction(state,task,artifact,)
 
-                artifact =self.review_agent.review_artifact(
-                    task,
-                    artifact
-                )
+                artifact = self.execution_agent.correct_task(task,state,artifact)
+
+                artifact =self.review_agent.review_artifact(task,artifact)
 
             return artifact
 
