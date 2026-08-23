@@ -14,12 +14,27 @@ python app.py
 pip install -r requirements.txt
 ```
 
-**Setup MARS Gateway (UAL enterprise, one-time):**
-```bash
-python setup_claude_code_mars_oidc.py
-```
+## Claude CLI Setup
 
-There are no automated tests in this codebase yet.
+QAgentic supports Claude through the Claude Code CLI.
+
+Claude CLI authentication and the company-provided MARS/OIDC configuration are handled outside the QAgentic repository through the company's standard environment setup.
+
+Before using the claude_cli provider, ensure that:
+
+**Claude Code CLI is installed.**
+
+**The company MARS/OIDC setup has been completed.**
+
+**The claude command is available on PATH.**
+
+For interactive Claude usage in the company environment:
+
+`mars_claude`
+
+QAgentic uses the configured Claude CLI non-interactively through ClaudeCLIProvider.
+
+QAgentic does not call the Anthropic API directly for the claude_cli provider. Claude requests are routed through the locally available Claude Code CLI.
 
 ## Configuration
 
