@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import sqlite3
 from datetime import datetime, timezone
+
 from memory.models.memory_category import MemoryCategory
 from memory.models.memory_entry import MemoryEntry
 from memory.models.memory_query import MemoryQuery
@@ -15,26 +16,25 @@ from memory.stores.memory_store import MemoryStore
 from utils.logger import logger
 
 
-
 class SQLiteMemoryStore(MemoryStore):
     """
     SQLite-backed implementation of the MemoryStore contract.
     """
 
     def __init__(self, database_path: str = "memory.db") -> None:
-
         self.database_path = database_path
-        logger.info("Memory store initialized | database=%s",Path(self.database_path).resolve(),)
+
+        logger.info(
+            "Memory store initialized | database=%s",
+            Path(self.database_path).resolve(),
+        )
+
         self._initialize_database()
-
-
 
     def _get_connection(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)
         connection.row_factory = sqlite3.Row
         return connection
-
-
 
     def _initialize_database(self) -> None:
         with self._get_connection() as connection:
@@ -59,8 +59,6 @@ class SQLiteMemoryStore(MemoryStore):
 
             connection.commit()
 
-
-
     def save(self, memory: MemoryEntry) -> None:
         with self._get_connection() as connection:
             connection.execute(
@@ -79,7 +77,7 @@ class SQLiteMemoryStore(MemoryStore):
                     expires_at,
                     metadata
                 )
-                VALUES (?, ?,?,?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     memory.id,
@@ -103,9 +101,6 @@ class SQLiteMemoryStore(MemoryStore):
 
             connection.commit()
 
-
-
-
     def get(self, memory_id: str) -> MemoryEntry | None:
         with self._get_connection() as connection:
             row = connection.execute(
@@ -115,28 +110,28 @@ class SQLiteMemoryStore(MemoryStore):
                 WHERE id = ?
                 """,
                 (memory_id,),
-                 ).fetchone()
+            ).fetchone()
 
             if row is None:
                 return None
 
         return self._row_to_memory(row)
 
-
-
-
     def search(self, query: MemoryQuery) -> list[MemoryEntry]:
-
         conditions = ["content LIKE ?"]
 
-        parameters: list[object] = [f"%{query.query}%"]
+        parameters: list[object] = [
+            f"%{query.query}%"
+        ]
 
-        logger.info("Memory search | query=%s | scope=%s | ""minimum_confidence=%s | limit=%s",
-        query.query,
-        query.scope,
-        query.minimum_confidence,
-        query.limit,)
-
+        logger.info(
+            "Memory search | query=%s | scope=%s | "
+            "minimum_confidence=%s | limit=%s",
+            query.query,
+            query.scope,
+            query.minimum_confidence,
+            query.limit,
+        )
 
         if query.scope is not None:
             conditions.append("scope = ?")
@@ -151,17 +146,22 @@ class SQLiteMemoryStore(MemoryStore):
             parameters.append(query.minimum_confidence)
 
         if not query.include_expired:
-            conditions.append("(expires_at IS NULL OR expires_at > ?)")
-            parameters.append(datetime.now(timezone.utc).isoformat())
+            conditions.append(
+                "(expires_at IS NULL OR expires_at > ?)"
+            )
+            parameters.append(
+                datetime.now(timezone.utc).isoformat()
+            )
 
         if query.capability is not None:
             conditions.append(
                 """
-            (
-                json_extract(metadata, '$.capability') = ?
-                OR json_extract(metadata, '$.capability') = 'common'
+                (
+                    json_extract(metadata, '$.capability') = ?
+                    OR json_extract(metadata, '$.capability') = 'common'
+                )
+                """
             )
-            """)
             parameters.append(query.capability)
 
         where_clause = " AND ".join(conditions)
@@ -172,17 +172,25 @@ class SQLiteMemoryStore(MemoryStore):
             WHERE {where_clause}
             ORDER BY updated_at DESC
             LIMIT ?
-            """
+        """
 
         parameters.append(query.limit)
 
         with self._get_connection() as connection:
-                rows = connection.execute(sql,parameters,).fetchall()
-                logger.info("Memory search results | count=%d",len(rows),)
-        return [self._row_to_memory(row) for row in rows]
+            rows = connection.execute(
+                sql,
+                parameters,
+            ).fetchall()
 
+            logger.info(
+                "Memory search results | count=%d",
+                len(rows),
+            )
 
-
+        return [
+            self._row_to_memory(row)
+            for row in rows
+        ]
 
     def update(self, memory: MemoryEntry) -> None:
         with self._get_connection() as connection:
@@ -192,7 +200,7 @@ class SQLiteMemoryStore(MemoryStore):
                 SET
                     content = ?,
                     memory_type = ?,
-                    category=?,
+                    category = ?,
                     scope = ?,
                     source = ?,
                     importance = ?,
@@ -230,8 +238,6 @@ class SQLiteMemoryStore(MemoryStore):
 
             connection.commit()
 
-
-
     def delete(self, memory_id: str) -> None:
         with self._get_connection() as connection:
             connection.execute(
@@ -244,11 +250,11 @@ class SQLiteMemoryStore(MemoryStore):
 
             connection.commit()
 
-
-
-
     @staticmethod
-    def _row_to_memory(row: sqlite3.Row) -> MemoryEntry:
+    def _row_to_memory(
+        row: sqlite3.Row,
+    ) -> MemoryEntry:
+
         return MemoryEntry(
             id=row["id"],
             content=row["content"],
@@ -258,8 +264,12 @@ class SQLiteMemoryStore(MemoryStore):
             source=MemorySource(row["source"]),
             importance=MemoryImportance(row["importance"]),
             confidence=row["confidence"],
-            created_at=datetime.fromisoformat(row["created_at"]),
-            updated_at=datetime.fromisoformat(row["updated_at"]),
+            created_at=datetime.fromisoformat(
+                row["created_at"]
+            ),
+            updated_at=datetime.fromisoformat(
+                row["updated_at"]
+            ),
             expires_at=(
                 datetime.fromisoformat(row["expires_at"])
                 if row["expires_at"]
@@ -268,12 +278,12 @@ class SQLiteMemoryStore(MemoryStore):
             metadata=json.loads(row["metadata"]),
         )
 
-
-
-    def list(self,query: MemoryQuery,) -> list[MemoryEntry]:
+    def list(
+    self,
+    query: MemoryQuery,
+) -> list[MemoryEntry]:
 
         conditions = []
-
         parameters: list[object] = []
 
         if query.scope is not None:
@@ -290,12 +300,13 @@ class SQLiteMemoryStore(MemoryStore):
 
         if query.capability is not None:
             conditions.append(
-            """
-            (
-            json_extract(metadata, '$.capability') = ?
-            OR json_extract(metadata, '$.capability') = 'common'
+                """
+                (
+                    json_extract(metadata, '$.capability') = ?
+                    OR json_extract(metadata, '$.capability') = 'common'
+                )
+                """
             )
-            """)
             parameters.append(query.capability)
 
         if query.minimum_confidence is not None:
@@ -303,8 +314,12 @@ class SQLiteMemoryStore(MemoryStore):
             parameters.append(query.minimum_confidence)
 
         if not query.include_expired:
-            conditions.append("(expires_at IS NULL OR expires_at > ?)")
-            parameters.append(datetime.now(timezone.utc).isoformat())
+            conditions.append(
+                "(expires_at IS NULL OR expires_at > ?)"
+            )
+            parameters.append(
+                datetime.now(timezone.utc).isoformat()
+            )
 
         where_clause = (
             f"WHERE {' AND '.join(conditions)}"
@@ -317,10 +332,7 @@ class SQLiteMemoryStore(MemoryStore):
             FROM memories
             {where_clause}
             ORDER BY updated_at DESC
-            LIMIT ?
         """
-
-        parameters.append(query.limit)
 
         with self._get_connection() as connection:
             rows = connection.execute(
@@ -328,7 +340,100 @@ class SQLiteMemoryStore(MemoryStore):
                 parameters,
             ).fetchall()
 
-        return [
+        memories = [
             self._row_to_memory(row)
             for row in rows
         ]
+
+        # --------------------------------------------------
+        # Execution context filtering
+        #
+        # Context filtering happens BEFORE semantic retrieval.
+        #
+        # When the query contains execution context:
+        #
+        # 1. Legacy memories without execution_context
+        #    are rejected.
+        #
+        # 2. If a historical context contains a field that
+        #    conflicts with the current context, reject it.
+        #
+        # 3. Missing individual historical fields are allowed.
+        #
+        # Example:
+        #
+        # Historical:
+        # {
+        #     "repository_url": "...",
+        #     "framework": "maven",
+        #     "command": "mvn test"
+        # }
+        #
+        # Current:
+        # {
+        #     "repository_url": "...",
+        #     "framework": "maven",
+        #     "command": "mvn test",
+        #     "test_path": "src/test"
+        # }
+        #
+        # Result: MATCH
+        #
+        # repository_path is intentionally not compared because
+        # remote repositories are cloned into temporary paths.
+        # --------------------------------------------------
+
+        if query.context:
+
+            filtered_memories = []
+
+            for memory in memories:
+
+                memory_metadata = memory.metadata or {}
+
+                memory_context = memory_metadata.get(
+                    "execution_context"
+                )
+
+                # --------------------------------------------------
+                # Reject legacy memories that have no execution
+                # context at all.
+                # --------------------------------------------------
+
+                if not isinstance(memory_context, dict):
+                    continue
+
+                if not memory_context:
+                    continue
+
+                matches = True
+
+                for key, query_value in query.context.items():
+
+                    memory_value = memory_context.get(key)
+
+                    # Missing individual historical fields are
+                    # allowed. We only reject explicit conflicts.
+                    if memory_value is None:
+                        continue
+
+                    if (
+                        query_value is not None
+                        and str(memory_value) != str(query_value)
+                    ):
+                        matches = False
+                        break
+
+                if matches:
+                    filtered_memories.append(memory)
+
+            logger.info(
+                "Memory context filtering | input=%d | matched=%d | context=%s",
+                len(memories),
+                len(filtered_memories),
+                query.context,
+            )
+
+            memories = filtered_memories
+
+        return memories[:query.limit]

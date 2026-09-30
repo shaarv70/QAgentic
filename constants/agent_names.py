@@ -6,6 +6,14 @@ class AgentNames:
 
     EXECUTION = "Execution"
 
+    MCP_EXECUTION = "MCPExecution"
+
+    REPOSITORY_EXECUTION = "RepositoryExecution"
+
+    REPOSITORY_ANALYSIS = "RepositoryAnalysis"
+
+    EXECUTION = "Execution"
+
     REVIEW = "Review"
 
     CORRECTION = "Correction"

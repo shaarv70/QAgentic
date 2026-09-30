@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from uuid import uuid4
+
 from models.state import State
 from memory.memory_manager import MemoryManager
 from memory.models.memory_category import MemoryCategory
@@ -8,7 +9,8 @@ from memory.models.memory_types import (
     MemoryImportance,
     MemoryScope,
     MemorySource,
-    MemoryType,)
+    MemoryType,
+)
 from utils.logger import logger
 
 
@@ -16,8 +18,6 @@ class EpisodeService:
 
     def __init__(self, memory_manager: MemoryManager) -> None:
         self.memory_manager = memory_manager
-
-
 
     def capture_execution(self, state: State) -> bool:
         """
@@ -52,19 +52,19 @@ class EpisodeService:
 
         return saved
 
-
-
-
     def _build_summary(self, state: State) -> str:
 
-        lines = [f"Requirement: {state.requirement}",]
+        lines = [
+            f"Requirement: {state.requirement}",
+        ]
 
         if state.run_id:
             lines.append(f"Run ID: {state.run_id}")
 
         if state.plan:
             lines.append(
-                f"Tasks planned: {len(state.plan.tasks)}")
+                f"Tasks planned: {len(state.plan.tasks)}"
+            )
 
         if not state.artifacts:
             lines.append("No artifacts were generated.")
@@ -100,19 +100,22 @@ class EpisodeService:
                 f"review_retry_count="
                 f"{artifact.review_retry_count}, "
                 f"execution_time="
-                f"{artifact.execution_time:.2f}s")
+                f"{artifact.execution_time:.2f}s"
+            )
 
             if artifact.review is not None:
                 lines.append(
                     f"Review for {artifact.task_id}: "
-                    f"status={artifact.review.status}")
+                    f"status={artifact.review.status}"
+                )
 
         if failed > 0:
             outcome = "FAILED"
 
         elif (
             completed == len(state.artifacts)
-            and approved == len(state.artifacts)):
+            and approved == len(state.artifacts)
+        ):
             outcome = "COMPLETED_AND_APPROVED"
 
         elif completed == len(state.artifacts):
@@ -125,15 +128,16 @@ class EpisodeService:
 
         return "\n".join(lines)
 
-
-
-
     def _build_metadata(self, state: State) -> dict:
 
         completed = 0
         failed = 0
         review_passed = 0
         corrections = 0
+
+        execution_context = self._extract_execution_context(
+            state
+        )
 
         for artifact in state.artifacts.values():
 
@@ -157,12 +161,26 @@ class EpisodeService:
             "failed_artifacts": failed,
             "review_passed": review_passed,
             "corrections": corrections,
+            "execution_context": execution_context,
         }
 
+    def _extract_execution_context(self,state: State,) -> dict:
 
+        for artifact in state.artifacts.values():
 
+            context = self._extract_artifact_execution_context(artifact)
 
-    def capture_correction(self,state,task,artifact,) -> bool:
+            if context:
+                return context
+
+        return {}
+
+    def capture_correction(
+        self,
+        state,
+        task,
+        artifact,
+    ) -> bool:
 
         review = artifact.review
 
@@ -203,14 +221,20 @@ class EpisodeService:
                 "capability": artifact.capability,
                 "correction_attempt": correction_attempt,
                 "review_feedback": review.feedback,
+                "execution_context": self._extract_artifact_execution_context(
+                    artifact
+                ),
             },
         )
 
         return self.memory_manager.remember(memory)
 
-
-
-    def capture_review(self,state,task,artifact,) -> bool:
+    def capture_review(
+        self,
+        state,
+        task,
+        artifact,
+    ) -> bool:
 
         review = artifact.review
 
@@ -245,15 +269,21 @@ class EpisodeService:
                 "capability": artifact.capability,
                 "review_status": review.status,
                 "review_feedback": review.feedback,
+                "execution_context": self._extract_artifact_execution_context(
+                    artifact
+                ),
             },
         )
 
         return self.memory_manager.remember(memory)
 
-
-
-
-    def capture_failure(self,state,task,artifact,failure_reason: str,) -> bool:
+    def capture_failure(
+        self,
+        state,
+        task,
+        artifact,
+        failure_reason: str,
+    ) -> bool:
 
         now = datetime.now(timezone.utc)
 
@@ -264,7 +294,8 @@ class EpisodeService:
             f"Capability: {artifact.capability}\n"
             f"Failure type: EXECUTION\n"
             f"Retry count: {artifact.retry_count}\n"
-            f"Failure reason: {failure_reason}")
+            f"Failure reason: {failure_reason}"
+        )
 
         memory = MemoryEntry(
             id=f"failure_{uuid4().hex}",
@@ -284,8 +315,44 @@ class EpisodeService:
                 "failure_type": "EXECUTION",
                 "retry_count": artifact.retry_count,
                 "failure_reason": failure_reason,
+                "execution_context": self._extract_artifact_execution_context(
+                    artifact
+                ),
             },
         )
 
         return self.memory_manager.remember(memory)
+
+    @staticmethod
+    def _extract_artifact_execution_context(
+        artifact,
+    ) -> dict:
+
+        if not isinstance(artifact.content, dict):
+            return {}
+
+        metadata = artifact.content.get("metadata", {})
+
+        if not isinstance(metadata, dict):
+            return {}
+
+        context = {}
+
+        for key in (
+            "repository_url",
+            "framework",
+            "command",
+            "branch",
+            "test_path",
+        ):
+            value = metadata.get(key)
+
+            if value is None:
+                value = artifact.content.get(key)
+
+            if value is not None:
+                context[key] = str(value)
+
+        return context
+
 

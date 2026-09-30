@@ -1,3 +1,6 @@
+from typing import Any
+
+
 class Task:
     """
     ==========================================================
@@ -12,7 +15,7 @@ class Task:
     task_id: str
     capability: str
     description: str
-    context: dict[str, str]
+    context: dict[str, Any]
     depends_on: list[str]
 
 

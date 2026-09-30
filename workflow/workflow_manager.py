@@ -11,37 +11,29 @@ class WorkflowManager:
     Purpose:
         Entry point for the complete workflow layer.
 
-    Responsibilities:
-        • Accept workflow execution requests.
-        • Delegate execution to LangGraphEngine.
-        • Return the updated WorkflowState.
+    The manager remains deliberately thin.
 
-    This class NEVER:
+    It does NOT:
+        • create checkpoints
+        • handle approvals
+        • interact with LangGraph directly
+        • execute business logic
 
-        ❌ Creates workflow nodes.
-        ❌ Creates graphs.
-        ❌ Calls agents.
-        ❌ Executes business logic.
-
-    Created By:
-        app.py
-
-    Used By:
-        SupervisorAgent
+    It simply delegates execution/resume to WorkflowEngine.
+    ==========================================================
     """
 
-    def __init__(self,workflow_engine):
+    def __init__(self, workflow_engine):
 
         self.workflow_engine = workflow_engine
 
+    def execute(
+        self,
+        workflow_state: WorkflowState,
+        resume=None,
+    ) -> WorkflowState:
 
-
-    def execute(self,workflow_state: WorkflowState) -> WorkflowState:
-        """
-        Starts workflow execution.
-
-        Supervisor should always invoke
-        the workflow through this method.
-        """
-
-        return self.workflow_engine.execute(workflow_state)
+        return self.workflow_engine.execute(
+            workflow_state,
+            resume=resume,
+        )

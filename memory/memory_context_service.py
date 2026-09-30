@@ -12,14 +12,18 @@ class MemoryContextService:
     ) -> None:
         self.context_builder = context_builder
 
-
-
-    def build(self,
+    def build(
+        self,
         agent_name: str,
         query_text: str,
-        capability: str | None = None,) -> str:
+        capability: str | None = None,
+        context: dict[str, str] | None = None,
+    ) -> str:
 
-        enriched_query = self._build_query_text(query_text,capability,)
+        enriched_query = self._build_query_text(
+            query_text,
+            capability,
+        )
 
         policy = self._policy(agent_name)
 
@@ -32,6 +36,7 @@ class MemoryContextService:
                     MemoryCategory.SEMANTIC,
                     policy["semantic"],
                     capability,
+                    context,
                 )
             )
 
@@ -42,6 +47,7 @@ class MemoryContextService:
                     MemoryCategory.EPISODIC,
                     policy["episodic"],
                     capability,
+                    context,
                 )
             )
 
@@ -52,6 +58,7 @@ class MemoryContextService:
                     MemoryCategory.PROCEDURAL,
                     policy["procedural"],
                     capability,
+                    context,
                 )
             )
 
@@ -67,6 +74,7 @@ class MemoryContextService:
         category: MemoryCategory,
         limit: int,
         capability: str | None = None,
+        context: dict[str, str] | None = None,
     ) -> str:
 
         memory_context = (
@@ -75,6 +83,7 @@ class MemoryContextService:
                     query=query_text,
                     category=category,
                     capability=capability,
+                    context=context,
                     minimum_confidence=0.7,
                     limit=limit,
                 )
@@ -104,60 +113,60 @@ class MemoryContextService:
 
         policies = {
 
-        AgentNames.REQUIREMENT_INTELLIGENCE: {
-            "semantic": 1,
-            "episodic": 0,
-            "procedural": 1,
-        },
+            AgentNames.REQUIREMENT_INTELLIGENCE: {
+                "semantic": 1,
+                "episodic": 0,
+                "procedural": 1,
+            },
 
-        AgentNames.PLANNER: {
-            "semantic": 1,
-            "episodic": 0,
-            "procedural": 1,
-        },
+            AgentNames.PLANNER: {
+                "semantic": 1,
+                "episodic": 0,
+                "procedural": 1,
+            },
 
-        AgentNames.REVIEW: {
-            "semantic": 0,
-            "episodic": 1,
-            "procedural": 1,
-        },
+            AgentNames.REVIEW: {
+                "semantic": 0,
+                "episodic": 1,
+                "procedural": 1,
+            },
 
-        AgentNames.CORRECTION: {
-            "semantic": 1,
-            "episodic": 1,
-            "procedural": 1,
-        },
+            AgentNames.CORRECTION: {
+                "semantic": 1,
+                "episodic": 1,
+                "procedural": 1,
+            },
 
-        AgentNames.TESTCASE: {
-            "semantic": 1,
-            "episodic": 1,
-            "procedural": 1,
-        },
+            AgentNames.TESTCASE: {
+                "semantic": 1,
+                "episodic": 1,
+                "procedural": 1,
+            },
 
-        AgentNames.AUTOMATION: {
-            "semantic": 1,
-            "episodic": 1,
-            "procedural": 1,
-        },
+            AgentNames.AUTOMATION: {
+                "semantic": 1,
+                "episodic": 1,
+                "procedural": 1,
+            },
 
-        AgentNames.DATABASE: {
-            "semantic": 1,
-            "episodic": 1,
-            "procedural": 1,
-        },
+            AgentNames.DATABASE: {
+                "semantic": 1,
+                "episodic": 1,
+                "procedural": 1,
+            },
 
-        AgentNames.SUMMARY: {
-            "semantic": 1,
-            "episodic": 0,
-            "procedural": 1,
-        },
-    }
+            AgentNames.SUMMARY: {
+                "semantic": 1,
+                "episodic": 0,
+                "procedural": 1,
+            },
+        }
 
         return policies.get(
-        agent_name,
-        {
-            "semantic": 1,
-            "episodic": 0,
-            "procedural": 1,
-        },
-    )
+            agent_name,
+            {
+                "semantic": 1,
+                "episodic": 0,
+                "procedural": 1,
+            },
+        )

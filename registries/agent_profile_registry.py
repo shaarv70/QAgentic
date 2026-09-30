@@ -39,6 +39,8 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
         super().__init__()
         self._register_default_profiles()
 
+
+
     def _register_default_profiles(self):
         model = _resolve_model()
 
@@ -73,6 +75,31 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
                 max_output_tokens=2000,
             ),
         )
+
+        self.register(
+            AgentNames.MCP_EXECUTION,
+            AgentProfile(
+                agent_name=AgentNames.MCP_EXECUTION,
+                model=model,
+                temperature=0.1,
+                response_format="json",
+                max_output_tokens=1500,
+            ),
+        )
+
+
+        self.register(
+            AgentNames.REPOSITORY_ANALYSIS,
+            AgentProfile(
+                agent_name=AgentNames.REPOSITORY_ANALYSIS,
+                model=model,
+                temperature=0.1,
+                response_format="json",
+                max_output_tokens=2500,
+            ),
+        )
+
+
 
         self.register(
             AgentNames.REVIEW,
@@ -121,7 +148,7 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
                 agent_name=AgentNames.AUTOMATION,
                 model=model,
                 temperature=0.2,
-                max_output_tokens=4000,
+                max_output_tokens=8000,
             ),
         )
 

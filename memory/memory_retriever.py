@@ -22,27 +22,36 @@ class MemoryRetriever:
         7. Return Top-K results.
     """
 
-    def __init__(self,store: MemoryStore,embedding_provider: EmbeddingProvider, similarity_threshold: float = 0.5,candidate_limit: int = 100) -> None:
+    def __init__(
+        self,
+        store: MemoryStore,
+        embedding_provider: EmbeddingProvider,
+        similarity_threshold: float = 0.5,
+        candidate_limit: int = 100,
+    ) -> None:
         self.store = store
         self.embedding_provider = embedding_provider
         self.similarity_threshold = similarity_threshold
         self.candidate_limit = candidate_limit
 
+    def retrieve(
+        self,
+        query: MemoryQuery,
+    ) -> list[MemoryEntry]:
 
-
-    def retrieve(self,query: MemoryQuery,) -> list[MemoryEntry]:
-        logger.info(
-            "MemoryQuery filters | capability=%s | category=%s | memory_type=%s | scope=%s",
+        logger.debug(
+            "MemoryQuery filters | capability=%s | category=%s | "
+            "memory_type=%s | scope=%s | context=%s",
             query.capability,
             query.category,
             query.memory_type,
             query.scope,
+            query.context,
         )
 
         # --------------------------------------------------
         # 1. Retrieve candidate memories
         # --------------------------------------------------
-
 
         memories = self.store.list(
             MemoryQuery(
@@ -51,6 +60,7 @@ class MemoryRetriever:
                 memory_type=query.memory_type,
                 category=query.category,
                 capability=query.capability,
+                context=query.context,
                 minimum_confidence=query.minimum_confidence,
                 limit=self.candidate_limit,
                 include_expired=query.include_expired,
@@ -60,15 +70,19 @@ class MemoryRetriever:
         if not memories:
             return []
 
-        logger.info("Semantic memory retrieval | query=%s | candidates=%d",query.query,len(memories),)
+        logger.debug(
+            "Semantic memory retrieval | query=%s | candidates=%d",
+            query.query,
+            len(memories),
+        )
 
         # --------------------------------------------------
         # 2. Generate query embedding
         # --------------------------------------------------
 
-        query_embedding = self.embedding_provider.embed(query.query)
-
-
+        query_embedding = self.embedding_provider.embed(
+            query.query
+        )
 
         # --------------------------------------------------
         # 3. Generate candidate embeddings
@@ -85,33 +99,54 @@ class MemoryRetriever:
         # 5. Apply relevance threshold
         # --------------------------------------------------
 
-
         scored_memories: List[Tuple[float, MemoryEntry]] = []
+
         threshold = self.similarity_threshold
+
         if query.category == MemoryCategory.PROCEDURAL:
             threshold = 0.25
-        for memory, embedding in zip(memories,memory_embeddings,):
-            score = self._cosine_similarity(query_embedding,embedding,)
+
+        for memory, embedding in zip(
+            memories,
+            memory_embeddings,
+        ):
+            score = self._cosine_similarity(
+                query_embedding,
+                embedding,
+            )
+
             if score >= threshold:
-                scored_memories.append((score, memory))
-            logger.info("Semantic memory result | id=%s | score=%.4f",memory.id,score,)
+                scored_memories.append(
+                    (score, memory)
+                )
+
+            logger.debug(
+                "Semantic memory result | id=%s | score=%.4f",
+                memory.id,
+                score,
+            )
 
         # --------------------------------------------------
         # 6. Rank by relevance
         # --------------------------------------------------
 
-
-        scored_memories.sort(key=lambda item: item[0],reverse=True,)
+        scored_memories.sort(
+            key=lambda item: item[0],
+            reverse=True,
+        )
 
         # --------------------------------------------------
         # 7. Return Top-K
         # --------------------------------------------------
 
         results = [
-            memory for _, memory in scored_memories[:query.limit]]
+            memory
+            for _, memory in scored_memories[:query.limit]
+        ]
 
-        logger.info(
-            "Semantic memory retrieval complete | ""candidates=%d | relevant=%d | returned=%d",
+        logger.debug(
+            "Semantic memory retrieval complete | "
+            "candidates=%d | relevant=%d | returned=%d",
             len(memories),
             len(scored_memories),
             len(results),
@@ -119,21 +154,33 @@ class MemoryRetriever:
 
         return results
 
-
-
     @staticmethod
-    def _cosine_similarity(vector_a: list[float],vector_b: list[float],) -> float:
+    def _cosine_similarity(
+        vector_a: list[float],
+        vector_b: list[float],
+    ) -> float:
 
         if len(vector_a) != len(vector_b):
-            raise ValueError("Embedding dimensions do not match.")
+            raise ValueError(
+                "Embedding dimensions do not match."
+            )
 
-        dot_product = sum(a * b for a, b in zip(vector_a, vector_b))
+        dot_product = sum(
+            a * b
+            for a, b in zip(vector_a, vector_b)
+        )
 
-        magnitude_a = math.sqrt(sum(a * a for a in vector_a))
+        magnitude_a = math.sqrt(
+            sum(a * a for a in vector_a)
+        )
 
-        magnitude_b = math.sqrt(sum(b * b for b in vector_b))
+        magnitude_b = math.sqrt(
+            sum(b * b for b in vector_b)
+        )
 
         if magnitude_a == 0 or magnitude_b == 0:
             return 0.0
 
-        return dot_product / (magnitude_a * magnitude_b)
+        return dot_product / (
+            magnitude_a * magnitude_b
+        )

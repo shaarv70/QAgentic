@@ -8,6 +8,7 @@ from ai.profiles.agent_profile import AgentProfile
 from ai.token.token_usage import TokenUsage
 from providers.base_provider import BaseProvider
 from ai.exceptions.ai_exception import AIRateLimitError
+from utils.logger import logger
 
 
 def _estimate_tokens(text: str) -> int:
@@ -112,16 +113,6 @@ class ClaudeCLIProvider(BaseProvider):
             profile.model,
         ]
 
-        # Claude CLI supports --max-tokens. Only add it when a value is
-        # explicitly configured so existing provider behavior is preserved.
-        if profile.max_output_tokens:
-            cmd.extend(
-                [
-                    "--max-tokens",
-                    str(profile.max_output_tokens),
-                ]
-            )
-
         try:
             result = subprocess.run(
                 cmd,
@@ -145,7 +136,7 @@ class ClaudeCLIProvider(BaseProvider):
 
         if result.returncode != 0:
 
-            # Preserve the existing stderr-based rate-limit detection.
+            # Preserve stderr-based rate-limit detection.
             if self._is_rate_limit_error(stderr):
                 raise AIRateLimitError(
                     "Claude CLI rate limit exceeded.",
@@ -153,7 +144,6 @@ class ClaudeCLIProvider(BaseProvider):
                 )
 
             # Some Claude CLI failures can still return structured JSON.
-            # Inspect stdout before falling back to the generic CLI error.
             try:
                 error_data = json.loads(result.stdout or "")
             except json.JSONDecodeError:
@@ -216,6 +206,13 @@ class ClaudeCLIProvider(BaseProvider):
             "cache_read_input_tokens"
         )
 
+        logger.info(
+         "Claude usage | input=%s | output=%s | cache_creation=%s | cache_read=%s",
+            usage.get("input_tokens", 0),
+            usage.get("output_tokens", 0),
+            usage.get("cache_creation_input_tokens", 0),
+            usage.get("cache_read_input_tokens", 0),
+        )
         if actual_input_tokens is not None:
             input_tokens = int(actual_input_tokens)
 

@@ -1,5 +1,7 @@
 import os
+
 from groq import Groq
+
 from ai.exceptions.ai_exception import AIRateLimitError
 from ai.models.llm_request import LLMRequest
 from ai.models.llm_response import LLMResponse
@@ -8,9 +10,7 @@ from ai.token.token_usage import TokenUsage
 from providers.base_provider import BaseProvider
 
 
-
-
-class  GroqProvider(BaseProvider):
+class GroqProvider(BaseProvider):
     """
     Groq implementation of the standardized LLM provider contract.
 
@@ -23,11 +23,11 @@ class  GroqProvider(BaseProvider):
     Pricing and cost calculation are handled outside the provider.
     """
 
-
-
-
-
-    def generate( self,request: LLMRequest,profile: AgentProfile,)->LLMResponse:
+    def generate(
+        self,
+        request: LLMRequest,
+        profile: AgentProfile,
+    ) -> LLMResponse:
         """
         Generate a response using Groq.
 
@@ -39,7 +39,6 @@ class  GroqProvider(BaseProvider):
         Returns:
             Standardized LLMResponse.
         """
-
 
         if not isinstance(request, LLMRequest):
             raise TypeError(
@@ -59,30 +58,37 @@ class  GroqProvider(BaseProvider):
             )
 
         client = Groq(api_key=api_key)
+
         try:
             response = client.chat.completions.create(
-            model=profile.model,
-            temperature=profile.temperature,
-            max_tokens=profile.max_output_tokens,
-            messages=[
-                {
-                    "role": "system",
-                    "content": request.system_prompt,
-                },
-                {
-                    "role": "user",
-                    "content": request.user_prompt,
-                },
-            ],
-        )
+                model=profile.model,
+                temperature=profile.temperature,
+                max_tokens=profile.max_output_tokens,
+                include_reasoning=False,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": request.system_prompt,
+                    },
+                    {
+                        "role": "user",
+                        "content": request.user_prompt,
+                    },
+                ],
+            )
+
         except Exception as ex:
             if getattr(ex, "status_code", None) == 429:
                 retry_after = None
 
-                response = getattr(ex, "response", None)
+                error_response = getattr(ex, "response", None)
 
-                if response is not None:
-                    headers = getattr(response, "headers", {})
+                if error_response is not None:
+                    headers = getattr(
+                        error_response,
+                        "headers",
+                        {},
+                    )
 
                     retry_value = headers.get("retry-after")
 
@@ -99,12 +105,43 @@ class  GroqProvider(BaseProvider):
 
             raise
 
-        content = response.choices[0].message.content
+        # Validate the response structure before accessing content.
+        if response is None:
+            raise RuntimeError(
+                "Groq returned no response object."
+            )
 
-        if not content:
-            raise RuntimeError("Groq returned an empty response.")
+        choices = getattr(response, "choices", None)
 
-        usage = response.usage
+        if not choices:
+            raise RuntimeError(
+                "Groq returned an empty choices collection."
+            )
+
+        choice = choices[0]
+
+        message = getattr(choice, "message", None)
+
+        if message is None:
+            raise RuntimeError(
+                "Groq returned a response without an assistant message."
+            )
+
+        content = getattr(message, "content", None)
+
+        if not content or not content.strip():
+            finish_reason = getattr(
+                choice,
+                "finish_reason",
+                None,
+            )
+
+            raise RuntimeError(
+                "Groq returned an empty response content. "
+                f"finish_reason={finish_reason!r}"
+            )
+
+        usage = getattr(response, "usage", None)
 
         token_usage = TokenUsage(
             input_tokens=usage.prompt_tokens if usage else 0,

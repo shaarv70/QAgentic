@@ -1,4 +1,6 @@
 from pathlib import Path
+import json
+
 from config import OUTPUT_FOLDER
 
 
@@ -15,6 +17,13 @@ def save_to_file(run_id, filename, content):
     )
 
     path = run_folder / filename
+
+    if not isinstance(content, str):
+        content = json.dumps(
+            content,
+            indent=2,
+            default=str
+        )
 
     with open(
         path,

@@ -41,9 +41,9 @@ class MemoryManager:
         Retrieve memories relevant to the supplied query.
         """
         memories = self.retriever.retrieve(query)
-        logger.info("Memory retrieval | query=%s | results=%d",query.query,len(memories),)
+        logger.debug("Memory retrieval | query=%s | results=%d",query.query,len(memories),)
         for memory in memories:
-            logger.info("Retrieved memory | id=%s | type=%s | importance=%s",memory.id,memory.memory_type.value,memory.importance.value,)
+            logger.debug("Retrieved memory | id=%s | type=%s | importance=%s",memory.id,memory.memory_type.value,memory.importance.value,)
 
         return memories
 

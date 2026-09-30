@@ -2,10 +2,15 @@ from ai.builders.context_builder import ContextBuilder
 from ai.prompts.prompt_result import PromptResult
 from constants.agent_names import AgentNames
 from memory.memory_context_service import MemoryContextService
+from prompts.mcp_execution_prompt import build_mcp_execution_prompt
+
+from prompts.planning_prompt import build_planning_prompt
+from prompts.repository_analysis_prompt import build_repository_analysis_prompt
+from prompts.repository_execution_prompt import build_repository_execution_prompt
 from prompts.requirement_intelligence_prompt import (
     build_requirement_intelligence_prompt,
 )
-from prompts.planning_prompt import build_planning_prompt
+
 from prompts.review_prompt import build_review_prompt
 from prompts.testcase_prompt import build_testcase_prompt
 from prompts.automation_prompt import build_automation_prompt
@@ -40,12 +45,13 @@ class PromptBuilder:
         self.memory_context_service = memory_context_service
 
 
-    def _memory(self,agent_name: str,query_text: str,capability: str | None = None,) -> str:
+    def _memory(self,agent_name: str,query_text: str,capability: str | None = None, context: dict[str, str] | None = None,) -> str:
 
         return self.memory_context_service.build(
         agent_name=agent_name,
         query_text=query_text,
         capability=capability,
+        context=context,
     )
 
     # ======================================================
@@ -77,15 +83,52 @@ class PromptBuilder:
         return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)
 
 
-    def review(self,task,artifact,):
+    def review(
+    self,
+    task,
+    artifact,
+    dependency_artifacts=None,
+) -> PromptResult:
 
         task_context = self.context_builder.task(task)
-        artifact_context = (self.context_builder.artifact(artifact))
-        review_memory_query = (f"{task.description} "f"{task.capability}")
-        memory_text = self._memory(AgentNames.REVIEW,review_memory_query,capability=task.capability,)
-        system_prompt, user_prompt = build_review_prompt(task_context,artifact_context,memory_text,)
-        return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)
 
+        artifact_context = (
+            self.context_builder.artifact(artifact)
+        )
+
+        dependency_context = (
+            self.context_builder.artifacts(
+                dependency_artifacts or {}
+            )
+        )
+
+        review_memory_query = (
+            f"{task.description} "
+            f"{task.capability}"
+        )
+
+        execution_context = (
+            self._extract_execution_context(artifact)
+        )
+
+        memory_text = self._memory(
+            AgentNames.REVIEW,
+            review_memory_query,
+            capability=task.capability,
+            context=execution_context,
+        )
+
+        system_prompt, user_prompt = build_review_prompt(
+            task_context,
+            artifact_context,
+            dependency_context,
+            memory_text,
+        )
+
+        return PromptResult(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
 
     # ======================================================
     # Generator Prompts
@@ -149,3 +192,143 @@ class PromptBuilder:
             feedback_context,
             dependency_context,memory_text,)
         return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)
+
+
+
+    def mcp_execution(
+    self,
+    execution_context,
+    available_tools,
+) -> PromptResult:
+
+        execution_context = self.context_builder.requirement(
+            execution_context
+        )
+
+        tools_context = self.context_builder.requirement(
+            available_tools
+        )
+
+        memory_text = self._memory(
+            AgentNames.MCP_EXECUTION,
+            execution_context,
+            capability="test_execution",
+        )
+
+        system_prompt, user_prompt = (
+            build_mcp_execution_prompt(
+                execution_context,
+                tools_context,
+                memory_text,
+            )
+        )
+
+        return PromptResult(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
+
+
+    def repository_execution(
+        self,
+        repository_context,
+        available_tools,
+    ) -> PromptResult:
+        """Build the repository execution planning prompt.
+
+        Repository execution participates in the same RAG architecture as
+        the other agent prompts. Memory is advisory context only; the trusted
+        repository operation and available MCP tools remain the execution
+        boundary.
+        """
+
+        memory_query = (
+            f"{repository_context} "
+            f"{available_tools}"
+        )
+
+        memory_text = self._memory(
+            AgentNames.REPOSITORY_EXECUTION,
+            memory_query,
+            capability="repository_execution",
+        )
+
+        system_prompt, user_prompt = build_repository_execution_prompt(
+            repository_context=repository_context,
+            available_tools=available_tools,
+            memory_context=memory_text,
+        )
+
+        return PromptResult(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
+
+
+
+
+    @staticmethod
+    def _extract_execution_context(
+        artifact,
+    ) -> dict[str, str]:
+
+        if not isinstance(artifact.content, dict):
+            return {}
+
+        metadata = artifact.content.get("metadata", {})
+
+        if not isinstance(metadata, dict):
+            return {}
+
+        context = {}
+
+        for key in (
+            "repository_url",
+            "framework",
+            "command",
+            "branch",
+            "test_path",
+        ):
+            value = metadata.get(key)
+
+            if value is None:
+                # command is stored at the artifact-content root
+                # for TestExecutionResult.
+                value = artifact.content.get(key)
+
+            if value is not None:
+                context[key] = str(value)
+
+        return context
+
+
+
+    def repository_analysis(
+    self,
+    workspace_path,
+    repository_evidence,
+    requested_suite=None,
+) -> PromptResult:
+
+        memory_text = self._memory(
+            AgentNames.REPOSITORY_ANALYSIS,
+            (
+                f"{workspace_path} "
+                f"{requested_suite or ''}"
+            ),
+            capability="repository_analysis",
+        )
+
+        system_prompt, user_prompt = (
+            build_repository_analysis_prompt(
+                workspace_path=workspace_path,
+                repository_evidence=repository_evidence,
+                requested_suite=requested_suite,
+                memory_context=memory_text,
+            )
+        )
+
+        return PromptResult(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )

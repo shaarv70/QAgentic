@@ -1,4 +1,5 @@
 from registries.base_registry import BaseRegistry
+
 from services.automation_service import AutomationGenerator
 from services.base_generator import BaseGenerator
 from services.database_service import DatabaseGenerator
@@ -6,13 +7,13 @@ from services.summary_service import SummaryGenerator
 from services.testcase_service import TestCaseGenerator
 
 
-
 class ToolRegistry(BaseRegistry[BaseGenerator]):
 
-
-
-   def __init__(self,ai_service,prompt_builder):
-
+    def __init__(
+        self,
+        ai_service,
+        prompt_builder,
+    ):
         super().__init__()
 
         self.ai_service = ai_service
@@ -22,24 +23,44 @@ class ToolRegistry(BaseRegistry[BaseGenerator]):
 
 
 
-
-
-   def _register_default_tools(self):
+    def _register_default_tools(self) -> None:
 
         self.register(
             "testcase",
-            TestCaseGenerator(self.ai_service,self.prompt_builder,))
+            TestCaseGenerator(self.ai_service,
+                self.prompt_builder,
+            ),
+        )
 
         self.register(
             "automation",
-            AutomationGenerator(self.ai_service,self.prompt_builder,))
+            AutomationGenerator(
+                self.ai_service,
+                self.prompt_builder,
+            ),
+        )
 
         self.register(
             "database",
-            DatabaseGenerator(self.ai_service,self.prompt_builder,))
+            DatabaseGenerator(
+                self.ai_service,
+                self.prompt_builder,
+            ),
+        )
 
         self.register(
             "summary",
-            SummaryGenerator(self.ai_service,self.prompt_builder,))
+            SummaryGenerator(
+                self.ai_service,
+                self.prompt_builder,
+            ),
+        )
 
+    def get_executable_names(self) -> list[str]:
+        """
+        Return the names of all registered executable tools.
 
+        This keeps ToolRegistry independent from the planner.
+        """
+
+        return self.get_registered_names()

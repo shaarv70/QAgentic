@@ -15,9 +15,9 @@ class RequirementIntelligenceService:
 
     def analyze(self,requirement,clarification_context="",):
 
-        system_prompt, user_prompt = (self.prompt_builder.requirement_intelligence(requirement,clarification_context,))
+        prompt = self.prompt_builder.requirement_intelligence(requirement,clarification_context,)
 
-        request = LLMRequest(system_prompt=system_prompt,user_prompt=user_prompt,)
+        request = LLMRequest(system_prompt=prompt.system_prompt,user_prompt=prompt.user_prompt,)
 
         response = self.ai_service.generate_json(AgentNames.REQUIREMENT_INTELLIGENCE,request,)
 

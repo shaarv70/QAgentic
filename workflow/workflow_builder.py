@@ -1,61 +1,63 @@
-from langgraph.graph import START, END, StateGraph
-from workflow.constants import (INTELLIGENCE, PUBLISH, REQUIREMENT,PLANNER,EXECUTION)
-from models.workflow_state import WorkflowState
-from workflow.workflow_routers.requirement_router import (requirement_router)
-from workflow.constants import PLANNER
+from langgraph.graph import END, START, StateGraph
+from workflow.constants import (
+    INTELLIGENCE,
+    PUBLISH,
+    REQUIREMENT,
+    PLANNER,
+    EXECUTION,
+)
 
+from models.workflow_state import WorkflowState
+from workflow.workflow_routers.requirement_router import requirement_router
 
 
 class WorkflowBuilder:
+
     """
-==========================================================
-Class : WorkflowBuilder
-==========================================================
+    ==========================================================
+    Class : WorkflowBuilder
+    ==========================================================
 
-Purpose:
-    Creates and compiles the LangGraph workflow.
+    Responsibility:
 
-Responsibility:
-    - Register workflow nodes.
-    - Connect nodes.
-    - Compile the graph.
+        • Register workflow nodes.
+        • Connect workflow nodes.
+        • Compile the graph.
 
-It NEVER:
-    - Executes business logic.
-    - Creates agents.
-    - Calls LLM.
-    - Reads user input.
-
-Created By:
-    app.py
-
-Used By:
-    LangGraphEngine
-"""
-
+    It does NOT execute the graph.
+    """
 
     def __init__(self, node_registry):
 
         self.node_registry = node_registry
 
+    def build(self, checkpointer=None):
 
+        workflow_graph = StateGraph(
+            WorkflowState
+        )
 
+        self.node_registry.register_all(
+            workflow_graph
+        )
 
-    def build(self):
+        self.build_edges(
+            workflow_graph
+        )
 
-        workflow_graph  = StateGraph(WorkflowState)
-        self.node_registry.register_all(workflow_graph)
-        self.build_edges(workflow_graph)
-        return workflow_graph.compile()
+        # ------------------------------------------------------
+        # The checkpointer is supplied by LangGraphEngine.
+        #
+        # Keeping it injected means WorkflowBuilder does not
+        # decide which persistence implementation is used.
+        # ------------------------------------------------------
 
+        return workflow_graph.compile(
+            checkpointer=checkpointer
+        )
 
+    def build_edges(self, graph):
 
-    def build_edges(self,graph):
-        """
-    Connects workflow nodes.
-
-    This method defines the workflow order.
-    """
         graph.add_edge(
             START,
             REQUIREMENT
@@ -69,10 +71,10 @@ Used By:
         graph.add_conditional_edges(
             INTELLIGENCE,
             requirement_router,
-        {
-             PLANNER: PLANNER,
-             END: END
-        }
+            {
+                PLANNER: PLANNER,
+                END: END,
+            }
         )
 
         graph.add_edge(
@@ -89,4 +91,3 @@ Used By:
             PUBLISH,
             END
         )
-

@@ -21,8 +21,10 @@ class MemoryQuery:
     memory_type: Optional[MemoryType] = None
     category: Optional[MemoryCategory] = None
     capability: Optional[str] = None
+    context: Optional[dict[str, str]] = None
     minimum_importance: Optional[MemoryImportance] = None
     minimum_confidence: Optional[float] = None
+
 
     limit: int = 5
     include_expired: bool = False

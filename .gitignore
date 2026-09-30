@@ -1,5 +1,10 @@
 # Environment / secrets
-.env
+# Python environments
+.venv/
+venv/
+env/
+.env/
+.selenium-mcp-venv/
 
 # Python cache
 __pycache__/
@@ -33,3 +38,4 @@ PythonPractice/
 # Test
 .pytest_cache/
 .coverage
+.qagentic

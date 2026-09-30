@@ -1,4 +1,5 @@
 import json
+from dataclasses import asdict, fields, is_dataclass
 
 from memory.memory_manager import MemoryManager
 from memory.models.memory_context import MemoryContext
@@ -17,11 +18,12 @@ class ContextBuilder:
         - Normalize domain objects
         - Serialize structured context
         - Keep serialization logic outside prompt files
-
     """
 
-    def __init__(self,memory_manager: MemoryManager | None = None,):
-
+    def __init__(
+        self,
+        memory_manager: MemoryManager | None = None,
+    ):
         self.memory_manager = memory_manager
 
 
@@ -35,11 +37,10 @@ class ContextBuilder:
             - strings
             - dictionaries
             - lists
+            - dataclasses
+            - Pydantic models
             - domain objects
             - nested non-JSON objects
-
-        Serialization remains centralized here so prompt files
-        do not need to know how application objects are represented.
         """
 
         if value is None:
@@ -55,6 +56,10 @@ class ContextBuilder:
             default=ContextBuilder._serialize_object,
         )
 
+
+
+
+
     @staticmethod
     def _serialize_object(value):
         """
@@ -62,16 +67,29 @@ class ContextBuilder:
         JSON-compatible representation.
         """
 
+        # Dataclass instance, including @dataclass(slots=True)
+        if not isinstance(value, type) and is_dataclass(value):
+            return {
+                field.name: getattr(value, field.name)
+                for field in fields(value)
+            }
+
+        # Pydantic v2
         if hasattr(value, "model_dump"):
             return value.model_dump()
 
+        # Pydantic v1 / legacy models
         if hasattr(value, "dict"):
             return value.dict()
 
+        # Normal Python objects
         if hasattr(value, "__dict__"):
             return vars(value)
 
+        # Final safe representation
         return str(value)
+
+
 
     @staticmethod
     def task(task) -> str:
@@ -89,22 +107,23 @@ class ContextBuilder:
             }
         )
 
-
     @staticmethod
     def artifact(artifact) -> str:
         """
         Convert a generated Artifact into prompt-ready context.
+
+        The centralized serializer is deliberately used here
+        because artifact.content may contain nested runtime
+        objects such as execution results or execution plans.
         """
 
-        return json.dumps(
+        return ContextBuilder._serialize(
             {
-            "task_id": artifact.task_id,
-            "capability": artifact.capability,
-            "content": artifact.content,
-            },
-            indent=2,
-            ensure_ascii=False,)
-
+                "task_id": artifact.task_id,
+                "capability": artifact.capability,
+                "content": artifact.content,
+            }
+        )
 
     @staticmethod
     def requirement(requirement) -> str:
@@ -113,8 +132,6 @@ class ContextBuilder:
         """
 
         return ContextBuilder._serialize(requirement)
-
-
 
     @staticmethod
     def artifacts(artifacts) -> str:
@@ -127,10 +144,10 @@ class ContextBuilder:
 
         return ContextBuilder._serialize(artifacts)
 
-
-
-
-    def build_memory_context(self,query: MemoryQuery,) -> MemoryContext:
+    def build_memory_context(
+        self,
+        query: MemoryQuery,
+    ) -> MemoryContext:
 
         if self.memory_manager is None:
             return MemoryContext()
@@ -141,19 +158,16 @@ class ContextBuilder:
             memories=memories
         )
 
-
-
-
     @staticmethod
-    def memory(memory_context: MemoryContext) -> str:
-        """
-        Convert retrieved memory into compact prompt context.
-        """
+    def memory(
+        memory_context: MemoryContext,
+    ) -> str:
 
         if memory_context.is_empty:
             return ""
 
         return "\n".join(
-        memory.content
-        for memory in memory_context.memories
-    )
+            memory.content
+            for memory in memory_context.memories
+        )
+

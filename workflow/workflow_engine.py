@@ -11,8 +11,17 @@ class WorkflowEngine(ABC):
     """
 
     @abstractmethod
-    def execute(self,workflow_state: WorkflowState) -> WorkflowState:
+    def execute(
+    self,
+    workflow_state: WorkflowState,
+    resume=None,
+) -> WorkflowState:
         """
-        Execute the workflow and return the updated state.
+        Execute or resume the workflow.
+
+        resume=None starts a new workflow.
+
+        A non-None resume value resumes an interrupted
+        LangGraph workflow.
         """
-        pass
+    pass
