@@ -1,4 +1,8 @@
 from capabilities.base_capability import BaseCapability
+from capabilities.code_push.code_push_capability import CodePushCapability
+from capabilities.page_inspection.page_inspection_capability import (
+    PageInspectionCapability,
+)
 from capabilities.repository.repository_capability import (
     RepositoryCapability,
 )
@@ -9,9 +13,13 @@ from capabilities.test_execution.test_execution_capability import (
     TestExecutionCapability,
 )
 from registries.base_registry import BaseRegistry
+from services.code_push_service import CodePushService
 from services.workspace.automation_workspace_materializer import AutomationWorkspaceMaterializer
 from capabilities.repository_analysis.repository_analysis_capability import (
     RepositoryAnalysisCapability,
+)
+from capabilities.test_gap_analysis.test_gap_analysis_capability import (
+    TestGapAnalysisCapability,
 )
 
 class CapabilityRegistry(BaseRegistry[BaseCapability]):
@@ -26,7 +34,10 @@ class CapabilityRegistry(BaseRegistry[BaseCapability]):
         repository_resolver,
         repository_discovery,
         automation_workspace_materializer: AutomationWorkspaceMaterializer,
-         repository_analysis_agent,
+        repository_analysis_agent,
+        self_healing_service=None,
+        approval_service=None,
+        test_gap_analysis_service=None,
     ) -> None:
 
         super().__init__()
@@ -66,6 +77,11 @@ class CapabilityRegistry(BaseRegistry[BaseCapability]):
         self.repository_analysis_agent = (
             repository_analysis_agent
         )
+
+        self.self_healing_service = self_healing_service
+        self.approval_service = approval_service
+        self.test_gap_analysis_service = test_gap_analysis_service
+
         self._register_default_capabilities()
 
 
@@ -117,8 +133,19 @@ class CapabilityRegistry(BaseRegistry[BaseCapability]):
                 execution_provider_factory=self.execution_provider_factory,
                 mcp_execution_agent=self.mcp_execution_agent,
                 mcp_tool_executor=self.mcp_tool_executor,
-                automation_workspace_materializer=self.automation_workspace_materializer
-                ,
+                automation_workspace_materializer=self.automation_workspace_materializer,
+                self_healing_service=self.self_healing_service,
+            ),
+        )
+
+        # ==========================================================
+        # Page inspection (Playwright MCP DOM snapshot)
+        # ==========================================================
+
+        self.register(
+            "page_inspection",
+            PageInspectionCapability(
+                mcp_tool_executor=self.mcp_tool_executor,
             ),
         )
 
@@ -134,6 +161,31 @@ class CapabilityRegistry(BaseRegistry[BaseCapability]):
                 ),
             ),
         )
+
+        # ==========================================================
+        # Code push (branch + commit + push + PR)
+        # ==========================================================
+
+        if self.approval_service is not None:
+            self.register(
+                "code_push",
+                CodePushCapability(
+                    approval_service=self.approval_service,
+                    code_push_service=CodePushService(),
+                ),
+            )
+
+        # ==========================================================
+        # Test gap analysis
+        # ==========================================================
+
+        if self.test_gap_analysis_service is not None:
+            self.register(
+                "test_gap_analysis",
+                TestGapAnalysisCapability(
+                    test_gap_analysis_service=self.test_gap_analysis_service,
+                ),
+            )
 
 
 

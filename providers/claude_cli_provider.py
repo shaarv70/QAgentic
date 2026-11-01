@@ -1,6 +1,9 @@
 import json
+import os
+import pathlib
 import shutil
 import subprocess
+import tempfile
 
 from ai.models.llm_request import LLMRequest
 from ai.models.llm_response import LLMResponse
@@ -30,7 +33,12 @@ class ClaudeCLIProvider(BaseProvider):
 
     @staticmethod
     def _resolve_claude_executable() -> str:
-        # On Windows, npm installs a .cmd wrapper; shutil.which resolves it.
+        # On Windows, npm installs a .cmd wrapper (claude.CMD) that runs
+        # through cmd.exe, which has an 8190-character command-line limit.
+        # Long --system-prompt values exceed this limit even though the
+        # Windows CreateProcess limit is 32767.
+        # Fix: detect the .cmd wrapper and resolve the real claude.exe that
+        # the batch file calls, then invoke it directly via CreateProcess.
         exe = shutil.which("claude")
 
         if exe is None:
@@ -38,6 +46,18 @@ class ClaudeCLIProvider(BaseProvider):
                 "claude CLI not found on PATH. "
                 "Install it with: npm install -g @anthropic-ai/claude-code"
             )
+
+        if os.name == "nt" and exe.lower().endswith((".cmd", ".bat")):
+            candidate = (
+                pathlib.Path(exe).parent
+                / "node_modules"
+                / "@anthropic-ai"
+                / "claude-code"
+                / "bin"
+                / "claude.exe"
+            )
+            if candidate.exists():
+                return str(candidate)
 
         return exe
 
@@ -90,19 +110,47 @@ class ClaudeCLIProvider(BaseProvider):
 
         claude = self._resolve_claude_executable()
 
-        # The CLI runs within a Claude Code session whose context may override
-        # some CLI-level prompt behavior. Embedding the system instruction in
-        # stdin ensures it is explicitly provided to the model.
-        combined_input = (
-            f"<system>\n{request.system_prompt}\n</system>\n\n"
-            f"{request.user_prompt}"
+        # Pass the QAgentic system prompt via --system-prompt so it REPLACES
+        # the Claude Code default system context (~26K tokens of tool
+        # definitions, CLAUDE.md, memory files, git state, etc.).
+        # This keeps each LLM call at ~600 tokens of system context instead
+        # of 26 000+, dramatically reducing latency.
+        #
+        # --no-session-persistence skips loading prior session history.
+        system_prompt = request.system_prompt
+
+        # The JSON enforcement is placed in BOTH the system prompt and the
+        # user message.  --system-prompt appends to Claude Code's ~26K-token
+        # default context, so a system-only instruction can be overridden by
+        # the model's default rich-markdown style.  Repeating the instruction
+        # as the final line of the user turn (the last thing the model reads
+        # before generating) is what actually enforces JSON output.
+        json_enforce = (
+            "\n\nIMPORTANT: Output only the JSON object defined above — "
+            "no markdown, no headers, no code fences, no surrounding text. "
+            "Use the exact keys specified in the schema. "
+            "Populate every field with your actual analysis."
         )
 
-        if profile.response_format == "json":
-            combined_input += (
-                "\n\nIMPORTANT: Your response must be a raw JSON object only. "
-                "No markdown, no code fences, no explanation — just the JSON."
-            )
+        # RepositoryExecution is excluded from json_enforce because it may
+        # not define a strict JSON schema and needs free-form output.
+        _SKIP_JSON_ENFORCE = {"RepositoryExecution"}
+
+        # Prepend a no-tool-use guard to every user message.
+        # Placed in the user turn (stdin) rather than --system-prompt to avoid
+        # hitting the Windows command-line length limit on long system prompts.
+        _NO_TOOL_PREFIX = (
+            "IMPORTANT: Do NOT use any tools, browsers, web search, "
+            "computer use, Bash, or file operations. "
+            "Generate your response from training knowledge only.\n\n"
+        )
+        user_input = _NO_TOOL_PREFIX + request.user_prompt
+        if (
+            profile.response_format == "json"
+            and profile.agent_name not in _SKIP_JSON_ENFORCE
+        ):
+            system_prompt += json_enforce
+            user_input += json_enforce
 
         cmd = [
             claude,
@@ -111,15 +159,28 @@ class ClaudeCLIProvider(BaseProvider):
             "json",
             "--model",
             profile.model,
+            "--system-prompt",
+            system_prompt,
+            "--no-session-persistence",
+            # Disable all MCP servers (browser MCP, playwright MCP, etc.)
+            # so the model cannot open a browser while generating text responses.
+            "--strict-mcp-config",
+            # Disallow computer-use tool (built-in browser/screenshot control).
+            "--disallowedTools", "computer",
         ]
 
         try:
+            # Run from a neutral temp directory so the Claude CLI does not
+            # treat the QAgentic project root as its own workspace and load
+            # all project files (CLAUDE.md, source code, memory) into the
+            # model context — which inflates input tokens and biases output.
             result = subprocess.run(
                 cmd,
-                input=combined_input,
+                input=user_input,
                 capture_output=True,
                 encoding="utf-8",
-                timeout=180,
+                timeout=1200,
+                cwd=tempfile.gettempdir(),
             )
 
         except FileNotFoundError:
@@ -129,7 +190,7 @@ class ClaudeCLIProvider(BaseProvider):
 
         except subprocess.TimeoutExpired:
             raise RuntimeError(
-                "Claude CLI request timed out after 180 seconds."
+                "Claude CLI request timed out after 1200 seconds."
             )
 
         stderr = (result.stderr or "").strip()

@@ -38,12 +38,11 @@ class ReviewService:
             request,
         )
 
-        status = response["status"].upper()
+        raw_status = response.get("status") or response.get("verdict") or "FAIL"
+        status = str(raw_status).upper()
 
         if status not in ["PASS", "FAIL"]:
-            raise ValueError(
-                f"Invalid review status: {status}"
-            )
+            status = "FAIL"
 
         return Review(
             status=status,

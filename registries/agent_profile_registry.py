@@ -138,7 +138,7 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
                 agent_name=AgentNames.TESTCASE,
                 model=model,
                 temperature=0.2,
-                max_output_tokens=2500,
+                max_output_tokens=2000,
             ),
         )
 
@@ -148,7 +148,7 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
                 agent_name=AgentNames.AUTOMATION,
                 model=model,
                 temperature=0.2,
-                max_output_tokens=8000,
+                max_output_tokens=4000,
             ),
         )
 
@@ -159,5 +159,60 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
                 model=model,
                 temperature=0.2,
                 max_output_tokens=2500,
+            ),
+        )
+
+        self.register(
+            AgentNames.REPOSITORY_EXECUTION,
+            AgentProfile(
+                agent_name=AgentNames.REPOSITORY_EXECUTION,
+                model=model,
+                temperature=0.1,
+                response_format="json",
+                max_output_tokens=2000,
+            ),
+        )
+
+        self.register(
+            AgentNames.SELF_HEALING,
+            AgentProfile(
+                agent_name=AgentNames.SELF_HEALING,
+                model=model,
+                temperature=0.1,
+                max_output_tokens=4000,
+            ),
+        )
+
+        # SelfHealingAgent — diagnosis call (returns JSON)
+        self.register(
+            AgentNames.SELF_HEALING_DIAGNOSIS,
+            AgentProfile(
+                agent_name=AgentNames.SELF_HEALING_DIAGNOSIS,
+                model=model,
+                temperature=0.1,
+                response_format="json",
+                max_output_tokens=500,
+            ),
+        )
+
+        # SelfHealingAgent — fix-generation call (returns delimiter-formatted files)
+        self.register(
+            AgentNames.SELF_HEALING_AGENT,
+            AgentProfile(
+                agent_name=AgentNames.SELF_HEALING_AGENT,
+                model=model,
+                temperature=0.1,
+                max_output_tokens=8000,
+            ),
+        )
+
+        self.register(
+            AgentNames.TEST_GAP_ANALYSIS,
+            AgentProfile(
+                agent_name=AgentNames.TEST_GAP_ANALYSIS,
+                model=model,
+                temperature=0.1,
+                response_format="json",
+                max_output_tokens=3000,
             ),
         )

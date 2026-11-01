@@ -25,3 +25,11 @@ class AgentNames:
     DATABASE="Database"
 
     AUTOMATION="Automation"
+
+    SELF_HEALING = "SelfHealing"
+
+    SELF_HEALING_AGENT = "SelfHealingAgent"
+
+    SELF_HEALING_DIAGNOSIS = "SelfHealingDiagnosis"
+
+    TEST_GAP_ANALYSIS = "TestGapAnalysis"

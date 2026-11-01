@@ -34,10 +34,12 @@ def requirement_router(state: WorkflowState) -> str:
             "Requirement Intelligence not available."
         )
 
-    if intelligence.status == READY:
+    status = (intelligence.status or "").upper()
+
+    if status == READY:
         return PLANNER
 
-    if intelligence.status == NEEDS_CLARIFICATION:
+    if status == NEEDS_CLARIFICATION:
         return END
 
     raise RuntimeError(

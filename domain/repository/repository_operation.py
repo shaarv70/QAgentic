@@ -16,6 +16,15 @@ class RepositoryOperationType(str, Enum):
     PUSH = "push"
     PULL_REQUEST = "pull_request"
 
+    @classmethod
+    def _missing_(cls, value):
+        # Accept any string as a passthrough operation so the
+        # RepositoryAgent can map it to whatever MCP tool is available.
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj._name_ = str(value).upper().replace("-", "_").replace(" ", "_")
+        return obj
+
 
 @dataclass(frozen=True, slots=True)
 class RepositoryOperation:

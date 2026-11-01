@@ -60,7 +60,7 @@ class PlanningService:
             request,
         )
 
-        tasks_data = response.get("tasks")
+        tasks_data = self._extract_tasks(response)
 
         if not isinstance(tasks_data, list) or not tasks_data:
             raise ValueError(
@@ -73,6 +73,12 @@ class PlanningService:
             intelligence
         )
         skipped_task_ids: set[str] = set()
+        # Maps LLM-assigned index IDs (task_1, task_2, …) to the
+        # renumbered IDs that actually appear in the plan.  When a task
+        # is skipped the counter does not advance, so downstream tasks
+        # get consecutive IDs (task_1, task_2) instead of (task_2, task_3).
+        old_id_to_new_id: dict[str, str] = {}
+        task_counter = 0
 
         for index, raw_task_data in enumerate(tasks_data, start=1):
             if not isinstance(raw_task_data, dict):
@@ -80,39 +86,60 @@ class PlanningService:
                     f"Planner task at index {index} must be an object."
                 )
 
+            raw_task_data = self._normalize_raw_task(raw_task_data)
+
+            # If capability is still absent but "name" matches a known action
+            # (e.g. model emitted {"name":"testcase","description":"..."}),
+            # promote name to capability.
+            if (
+                not raw_task_data.get("capability")
+                and raw_task_data.get("name") in self._action_names
+            ):
+                raw_task_data = dict(raw_task_data)
+                raw_task_data["capability"] = raw_task_data["name"]
+
             task_data = self._normalize_task_contract(
                 raw_task_data,
                 intelligence_context,
             )
 
             task_data = self._ensure_repository_workspace_context(
-                    task_data=task_data,
-                    requirement=requirement,
-                    intelligence_context=intelligence_context,
-                )
-
-                # ---------------------------------------------------------
-                # A repository_workspace task is only valid when an actual
-                # repository source was supplied.
-                #
-                # If no repository exists, this task is intentionally skipped.
-                # This allows generated-automation workflows to proceed without
-                # an existing repository.
-                # ---------------------------------------------------------
+                task_data=task_data,
+                requirement=requirement,
+                intelligence_context=intelligence_context,
+            )
 
             if task_data is None:
-                    skipped_task_ids.add(f"task_{index}")
-                    continue
+                skipped_task_ids.add(f"task_{index}")
+                continue
+
+            task_counter += 1
+            new_task_id = f"task_{task_counter}"
+            # Map by enumerate-index key (task_1, task_2, …)
+            old_id_to_new_id[f"task_{index}"] = new_task_id
+            # Also map by whatever task_id the model actually used
+            # (e.g. "task_001", "task_a", "step_1") so dependency
+            # references are resolved regardless of model ID format.
+            model_task_id = task_data.get("task_id") or ""
+            if model_task_id and model_task_id != f"task_{index}":
+                old_id_to_new_id[model_task_id] = new_task_id
 
             action_name = (
-                    task_data.get("capability")
-                    or task_data.get("action")
-                )
+                task_data.get("capability")
+                or task_data.get("action")
+            )
 
             if action_name not in self._action_names:
+                from utils.logger import logger as _log
+                import json as _json
+                _log.info(
+                    "Planner task with bad capability | action=%r | task=%s",
+                    action_name,
+                    _json.dumps(task_data, default=str)[:500],
+                )
                 raise ValueError(
                     "Planner returned unsupported executable action: "
-                    f"{action_name}"
+                    f"{action_name!r} (known: {sorted(self._action_names)})"
                 )
 
             description = task_data.get("description")
@@ -143,35 +170,44 @@ class PlanningService:
             )
 
             task = Task(
-                task_id=f"task_{index}",
+                task_id=new_task_id,
                 capability=action_name,
                 description=description.strip(),
                 context=task_context,
                 depends_on=[],
             )
 
-            raw_dependencies = task_data.get(
-                "depends_on",
-                [],
-            )
+            raw_dependencies = task_data.get("depends_on", [])
 
             if not isinstance(raw_dependencies, list):
                 raw_dependencies = [raw_dependencies]
 
-            raw_dependencies = [
-                dependency
-                for dependency in raw_dependencies
-                if self._dependency_task_id(dependency) not in skipped_task_ids
-            ]
+            # Translate LLM task IDs to renumbered IDs, dropping any
+            # dependency on a skipped task.
+            translated_dependencies: list = []
+            for dep in raw_dependencies:
+                old_dep_id = self._dependency_task_id(dep)
+                if old_dep_id in skipped_task_ids:
+                    continue
+                mapped = old_id_to_new_id.get(old_dep_id)
+                translated_dependencies.append(
+                    mapped if mapped is not None else dep
+                )
 
             task.depends_on = self._normalize_dependencies(
                 task_id=task.task_id,
-                raw_dependencies=raw_dependencies,
+                raw_dependencies=translated_dependencies,
                 planned_tasks=plan.tasks,
             )
 
             plan.tasks.append(task)
 
+        self._enforce_implicit_dependencies(plan)
+        self._inject_analysis_for_local_workspace(
+            plan=plan,
+            requirement=requirement,
+            intelligence_context=intelligence_context,
+        )
         self._validate_plan(plan)
 
         plan.priority = response.get(
@@ -187,6 +223,261 @@ class PlanningService:
         return plan
 
 
+
+    @staticmethod
+    def _extract_tasks(response: dict) -> list:
+        """
+        Extract the tasks list from a planner response that may use
+        any of the observed structural variants:
+          {"tasks": [...]}
+          {"plan": [...]}
+          {"plan": {"tasks": [...], ...}}
+          {"plan": {"goal": "...", "tasks": [...]}}
+        """
+        if not isinstance(response, dict):
+            return []
+
+        tasks = response.get("tasks")
+        if isinstance(tasks, list):
+            return tasks
+
+        for key in ("plan", "workflow"):
+            value = response.get(key)
+            if isinstance(value, list):
+                return value
+            if isinstance(value, dict):
+                tasks = value.get("tasks")
+                if isinstance(tasks, list):
+                    return tasks
+
+        return []
+
+    @staticmethod
+    def _enforce_implicit_dependencies(plan: Plan) -> None:
+        """
+        Enforce known implicit dependencies that the planner model sometimes omits.
+
+        Rule 1: test_execution MUST depend on automation when both are in the plan.
+        Rule 2: test_execution MUST depend on repository_analysis when both are in the plan.
+        """
+        automation_ids = {
+            task.task_id
+            for task in plan.tasks
+            if task.capability == "automation"
+        }
+        repo_analysis_ids = {
+            task.task_id
+            for task in plan.tasks
+            if task.capability == "repository_analysis"
+        }
+        if not automation_ids and not repo_analysis_ids:
+            return
+        for task in plan.tasks:
+            if task.capability != "test_execution":
+                continue
+            existing_deps = set(task.depends_on or [])
+            if automation_ids and not existing_deps.intersection(automation_ids):
+                existing_deps |= automation_ids
+            if repo_analysis_ids and not existing_deps.intersection(repo_analysis_ids):
+                existing_deps |= repo_analysis_ids
+            task.depends_on = sorted(existing_deps)
+
+    def _inject_analysis_for_local_workspace(
+        self,
+        plan: Plan,
+        requirement,
+        intelligence_context: dict,
+    ) -> None:
+        """
+        Safety net: when test_execution is planned without repository_analysis
+        but a local directory path is detectable, inject repository_analysis as
+        task_1 and make test_execution depend on it.
+
+        For local paths no repository_workspace task is needed — repository_analysis
+        resolves the workspace path from task context and test_execution uses
+        profile.working_directory via _apply_execution_profile.
+        """
+        from utils.logger import logger as _log
+
+        if "repository_analysis" not in self._action_names:
+            return
+
+        has_test_execution = any(
+            t.capability == "test_execution" for t in plan.tasks
+        )
+        has_repo_analysis = any(
+            t.capability == "repository_analysis" for t in plan.tasks
+        )
+
+        if not has_test_execution or has_repo_analysis:
+            return
+
+        import re as _re
+        from pathlib import Path as _Path
+
+        _WIN_PATH_RE = _re.compile(r"[A-Za-z]:[/\\]")
+        # Handles both single-backslash (C:\dir) and double-backslash
+        # (C:\\dir, from JSON serialization) Windows paths.
+        _WIN_PATH_EXTRACT = _re.compile(
+            r"[A-Za-z]:[/\\]{1,2}(?:[^\s\\/:*?\"<>|]+[/\\]{1,2})*[^\s\\/:*?\"<>|]+"
+        )
+
+        def _is_abs_path(s: str) -> bool:
+            # Exclude URLs — "s://" in "https://" matches [A-Za-z]:[/\\]
+            # but is not a local filesystem path.
+            if "://" in s:
+                return False
+            if (len(s) > 2 and s[1] == ":" and s[2] in "/\\") or s.startswith("/"):
+                return True
+            return bool(_WIN_PATH_RE.search(s))
+
+        def _extract_local_dir(s: str) -> str | None:
+            # Normalize double backslashes before matching so JSON-serialized
+            # paths (C:\\Users\\...) are treated the same as C:\Users\...
+            normalized = s.replace("\\\\", "\\")
+            for match in _WIN_PATH_EXTRACT.finditer(normalized):
+                candidate = match.group(0).rstrip(".,;)")
+                p = _Path(candidate)
+                if p.is_dir():
+                    return str(p)
+                if p.parent.is_dir():
+                    return str(p.parent)
+            return None
+
+        requirement_str = (
+            requirement if isinstance(requirement, str) else str(requirement or "")
+        )
+        context_values = (
+            list(intelligence_context.values())
+            if isinstance(intelligence_context, dict)
+            else []
+        )
+        all_strings = [requirement_str] + [
+            v for v in context_values if isinstance(v, str)
+        ]
+
+        if not any(_is_abs_path(s) for s in all_strings):
+            return
+
+        # Extract the normalized local directory path to inject explicitly as
+        # workspace_path so _resolve_workspace_path finds it without regex fallback.
+        local_path: str | None = None
+        for s in all_strings:
+            local_path = _extract_local_dir(s)
+            if local_path:
+                break
+
+        # No valid local directory found — do not inject a repository_analysis
+        # task with an empty workspace_path (happens when the requirement contains
+        # a URL like https://... that passes the path regex but is not a real path).
+        if local_path is None:
+            return
+
+        # Renumber existing tasks: task_N → task_(N+1).
+        old_to_new: dict[str, str] = {}
+        for task in plan.tasks:
+            tid = task.task_id
+            if tid.startswith("task_") and tid[5:].isdigit():
+                old_to_new[tid] = f"task_{int(tid[5:]) + 1}"
+
+        for task in plan.tasks:
+            new_id = old_to_new.get(task.task_id)
+            if new_id:
+                task.task_id = new_id
+            task.depends_on = [
+                old_to_new.get(d, d) for d in (task.depends_on or [])
+            ]
+
+        for task in plan.tasks:
+            if (
+                task.capability == "test_execution"
+                and "task_1" not in task.depends_on
+            ):
+                task.depends_on = ["task_1"] + task.depends_on
+
+        injected_context = self._build_task_context(
+            requirement=requirement,
+            intelligence_context=intelligence_context,
+            planner_context={},
+        )
+
+        # Inject the resolved path explicitly — bypasses the regex fallback in
+        # _resolve_workspace_path which breaks on double-backslash strings.
+        if local_path:
+            injected_context["workspace_path"] = local_path
+
+        plan.tasks.insert(0, Task(
+            task_id="task_1",
+            capability="repository_analysis",
+            description=(
+                "Analyze local workspace to determine the test framework, "
+                "runner, suite selector, and execution strategy."
+            ),
+            context=injected_context,
+            depends_on=[],
+        ))
+
+        _log.info(
+            "Injected repository_analysis as task_1 for local workspace | "
+            "test_execution tasks renumbered"
+        )
+
+    @staticmethod
+    def _normalize_raw_task(raw: dict) -> dict:
+        """
+        Normalise field names the model sometimes varies.
+
+        Handled aliases:
+          "id"        → "task_id"    (when task_id absent)
+          "name"      → "description" (when description absent)
+          "type" / "step_type" / "tool" / "action_type" / "kind"
+                      → "capability"  (when capability absent/null, OR when
+                                       capability is itself set to a meta-label
+                                       alias name rather than an actual
+                                       capability value — e.g. capability="tool")
+        Returns a new dict; never mutates the original.
+        """
+        # Field names that the model sometimes uses AS the value of capability
+        # instead of as sibling keys.  These are meta-labels, not valid
+        # capability names, and must be resolved via sibling fields.
+        # "capability" itself is included so that kind="capability" is treated
+        # as a meta-label rather than a real capability name.
+        _ALIAS_NAMES = frozenset(
+            ("type", "step_type", "tool", "action_type", "kind", "capability")
+        )
+
+        out = dict(raw)
+
+        if not out.get("task_id") and out.get("id"):
+            out["task_id"] = out["id"]
+
+        if not out.get("description") and out.get("name"):
+            out["description"] = out["name"]
+
+        capability_raw = out.get("capability")
+
+        # Resolve capability from alias sibling fields when:
+        #   (a) capability is absent/null, OR
+        #   (b) capability is itself a meta-label name (e.g. "tool", "kind",
+        #       or literally "capability") rather than a real capability value.
+        if not capability_raw or capability_raw in _ALIAS_NAMES:
+            if capability_raw in _ALIAS_NAMES:
+                # Clear the meta-label so we replace it with the real value.
+                out["capability"] = None
+            # "action" is checked first — it is the most common field the LLM
+            # uses to carry the real capability name alongside a "kind" field.
+            for alias in ("action", "type", "step_type", "tool", "action_type", "kind"):
+                candidate = out.get(alias)
+                if candidate and candidate not in _ALIAS_NAMES:
+                    out["capability"] = candidate
+                    break
+
+        # Last-resort fallback: use capability as description when the model
+        # omits both "description" and "name" (e.g. repository_analysis tasks).
+        if not out.get("description") and out.get("capability"):
+            out["description"] = out["capability"]
+
+        return out
 
     def _normalize_dependencies(
         self,
@@ -264,9 +555,13 @@ class PlanningService:
         if normalized.isdigit():
             return f"task_{int(normalized)}"
         if normalized.startswith("task_") and normalized[5:].isdigit():
-            return normalized
+            # Strip leading zeros: "task_001" → "task_1"
+            return f"task_{int(normalized[5:])}"
         if normalized.startswith("task") and normalized[4:].isdigit():
-            return f"task_{normalized[4:]}"
+            return f"task_{int(normalized[4:])}"
+        # Handle LLM-generated shorthand IDs: T1, T2, T3 → task_1, task_2, task_3
+        if len(normalized) >= 2 and normalized[0].upper() == "T" and normalized[1:].isdigit():
+            return f"task_{int(normalized[1:])}"
         return normalized
 
     @staticmethod
@@ -336,10 +631,14 @@ class PlanningService:
             return f"task_{number}"
 
         if value.startswith("task_") and value[5:].isdigit():
-            return value
+            return f"task_{int(value[5:])}"
 
         if value.startswith("task") and value[4:].isdigit():
-            return f"task_{value[4:]}"
+            return f"task_{int(value[4:])}"
+
+        # Handle LLM-generated shorthand IDs: T1, T2, T3 → task_1, task_2, task_3
+        if len(value) >= 2 and value[0].upper() == "T" and value[1:].isdigit():
+            return f"task_{int(value[1:])}"
 
         if value in known_by_name:
             return known_by_name[value]
@@ -440,8 +739,11 @@ class PlanningService:
 
                     return normalized
 
-            # Explicit semantic repository operations remain repository tasks.
-            if operation in semantic_repository_operations:
+            # Any non-empty operation that wasn't handled above is a semantic
+            # repository task. Route it to the repository capability regardless
+            # of whether the string is in the known set — the RepositoryAgent
+            # maps the intent to whatever MCP tools are available at runtime.
+            if operation:
                 normalized["capability"] = repository_capability
                 normalized["context"] = context
 
@@ -635,7 +937,42 @@ class PlanningService:
             or task_data.get("action")
         )
 
-        # Only repository_workspace requires this validation.
+        # repository_analysis is only valid when a real workspace exists.
+        # Skip it when the planner adds it for a non-repository requirement
+        # (workspace would be a template literal or absent entirely).
+        if capability == "repository_analysis":
+            ctx = task_data.get("context") or {}
+            workspace = ctx.get("workspace") or ctx.get("workspace_path") or ""
+            has_real_workspace = (
+                isinstance(workspace, str)
+                and workspace
+                and "{{" not in workspace
+                and not workspace.startswith("$")
+            )
+            has_repo = bool(
+                isinstance(intelligence_context, dict)
+                and (
+                    intelligence_context.get("repository_url")
+                    or intelligence_context.get("repository_path")
+                    # Also detect any absolute path/URL stored under any key
+                    # (model may use workspace, data_path, test_location, etc.)
+                    or any(
+                        isinstance(v, str) and (
+                            (len(v) > 2 and v[1] == ":" and v[2] in "/\\")
+                            or v.startswith("/")
+                            or v.startswith("http://")
+                            or v.startswith("https://")
+                            or v.startswith("git@")
+                        )
+                        for v in intelligence_context.values()
+                        if isinstance(v, str)
+                    )
+                )
+            )
+            if not has_real_workspace and not has_repo:
+                return None
+
+        # Only repository_workspace requires the validation below.
         if capability != "repository_workspace":
             return task_data
 

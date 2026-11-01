@@ -442,10 +442,13 @@ Approval:
                 not artifact.review
                 or artifact.review.status != "PASS"
             ):
-                raise RuntimeError(
+                logger.warning(
                     f"{artifact.task_id} failed quality review "
-                    f"after {MAX_REVIEW_RETRIES} corrections."
+                    f"after {MAX_REVIEW_RETRIES} corrections — "
+                    f"storing as FAILED and continuing pipeline"
                 )
+                state.artifacts[artifact.task_id] = artifact
+                continue
 
             state.artifacts[
                 artifact.task_id
@@ -462,16 +465,55 @@ Approval:
         artifact,
         state,
     ):
+        # Skip review for best-effort capabilities (e.g. page_inspection).
+        # These capabilities set review_required=False on their class and
+        # are allowed to produce empty/partial artifacts without blocking
+        # the pipeline.
+        capability = None
+        try:
+            capability = self.execution_agent._get_capability(task.capability)
+        except Exception:
+            pass
+        if capability is not None and not getattr(capability, "review_required", True):
+            logger.info(
+                f"{artifact.task_id} review skipped "
+                f"(capability '{task.capability}' has review_required=False)"
+            )
+            from models.review import Review
+            artifact.review = Review(status="PASS", feedback="review skipped — best-effort capability")
+            return artifact
+
         dependency_artifacts = {
-        dependency_id: state.artifacts[dependency_id]
-        for dependency_id in task.depends_on
-        if dependency_id in state.artifacts
-    }
-        artifact = self.review_agent.review_artifact(
-            task,
-            artifact,
-            dependency_artifacts
-        )
+            dependency_id: state.artifacts[dependency_id]
+            for dependency_id in task.depends_on
+            if dependency_id in state.artifacts
+        }
+
+        # A FAILED artifact means execution itself failed (e.g. compilation
+        # errors, non-zero exit code).  Skip the LLM quality review and
+        # inject a FAIL review directly so the self-healing correction loop
+        # triggers immediately rather than relying on the review agent to
+        # detect execution failures from opaque ExecutionResult objects.
+        if artifact.status == "FAILED":
+            from models.review import Review
+            execution_error = getattr(artifact.content, "stderr", None) or \
+                              getattr(artifact.content, "stdout", None) or \
+                              "Execution failed"
+            if isinstance(execution_error, str):
+                feedback = execution_error[-1000:].strip() or "Execution failed"
+            else:
+                feedback = "Execution failed"
+            artifact.review = Review(status="FAIL", feedback=feedback)
+            logger.info(
+                "%s execution failed — injecting FAIL review to trigger self-healing",
+                artifact.task_id,
+            )
+        else:
+            artifact = self.review_agent.review_artifact(
+                task,
+                artifact,
+                dependency_artifacts
+            )
 
         self.episode_service.capture_review(
             state,
@@ -505,13 +547,27 @@ Approval:
                 artifact,
             )
 
-            artifact = (
-                self.review_agent.review_artifact(
-                    task,
-                    artifact,
-                    dependency_artifacts,
+            # Same rule as above: if self-healing re-execution still failed,
+            # inject a FAIL review rather than letting the LLM review agent
+            # pass a broken execution result.
+            if artifact.status == "FAILED":
+                from models.review import Review as _Review
+                execution_error = getattr(artifact.content, "stderr", None) or \
+                                  getattr(artifact.content, "stdout", None) or \
+                                  "Execution failed"
+                if isinstance(execution_error, str):
+                    feedback = execution_error[-1000:].strip() or "Execution failed"
+                else:
+                    feedback = "Execution failed"
+                artifact.review = _Review(status="FAIL", feedback=feedback)
+            else:
+                artifact = (
+                    self.review_agent.review_artifact(
+                        task,
+                        artifact,
+                        dependency_artifacts,
+                    )
                 )
-            )
 
         return artifact
 

@@ -167,11 +167,21 @@ class RepositoryExecutionProfile:
     @property
     def selected_command(self) -> ExecutionCommand | None:
         """
-        Returns the selected execution command, if available.
+        Returns the execution command to use.
+
+        When a suite is selected, prefers the command whose suite
+        field matches the selected suite name.  Falls back to the
+        first command when no suite-specific command exists.
         """
 
         if not self.execution_commands:
             return None
+
+        if self.selected_suite:
+            suite_name = self.selected_suite.name
+            for cmd in self.execution_commands:
+                if cmd.suite == suite_name:
+                    return cmd
 
         return self.execution_commands[0]
 
@@ -228,14 +238,15 @@ class RepositoryExecutionProfile:
                 self.selected_suite = candidate
 
                 if candidate.command:
+                    # Suite has its own command — use it and inherit
+                    # the suite's determinism flag.
                     self.execution_commands = [
                         candidate.command
                     ]
-
-                self.deterministic = (
-                    candidate.deterministic
-                    and candidate.command is not None
-                )
+                    self.deterministic = candidate.deterministic
+                # When the suite has no command the general execution
+                # command (already on the profile) remains in effect
+                # and the profile-level deterministic flag is preserved.
 
                 self.confidence = candidate.confidence
 
@@ -288,9 +299,11 @@ class RepositoryExecutionProfile:
         Select a suite candidate without changing the general
         execution strategy.
 
-        A suite selection and a general repository execution command
-        are separate concepts. Selecting a suite must not invalidate
-        an otherwise deterministic repository-level execution command.
+        Matching order:
+          1. Exact name match (case-insensitive)
+          2. Name starts with the requested value
+          3. Name contains the requested value
+          4. selector or source contains the requested value
         """
 
         if not suite_name:
@@ -298,10 +311,29 @@ class RepositoryExecutionProfile:
 
         requested = suite_name.strip().lower()
 
-        for candidate in self.suite_candidates:
-            if candidate.name.strip().lower() == requested:
-                self.requested_suite = suite_name
-                self.selected_suite = candidate
-                return candidate
+        def _rank(candidate: SuiteCandidate) -> int:
+            name = candidate.name.strip().lower()
+            selector = (candidate.selector or "").lower()
+            source = (candidate.source or "").lower()
+            if name == requested:
+                return 0
+            if name.startswith(requested):
+                return 1
+            if requested in name:
+                return 2
+            if requested in selector or requested in source:
+                return 3
+            return 99
 
-        return None
+        matches = [
+            c for c in self.suite_candidates
+            if _rank(c) < 99
+        ]
+
+        if not matches:
+            return None
+
+        best = min(matches, key=_rank)
+        self.requested_suite = suite_name
+        self.selected_suite = best
+        return best

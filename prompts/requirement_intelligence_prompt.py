@@ -71,6 +71,9 @@ MCP server identification rules:
   "the available MCP server" do NOT identify a specific server.
 - In those cases, set mcp_server to null.
 - Use execution_mode="mcp" to indicate that MCP execution is requested.
+- Use execution_mode="local" for all other execution (direct run, CLI, framework-based).
+- execution_mode MUST be exactly "mcp" or "local" — never "direct", "selenium_java",
+  "playwright", or any other value.
 - Never invent an MCP server name.
 
 
@@ -94,6 +97,9 @@ PREVIOUS CLARIFICATION HISTORY:
 RELEVANT MEMORY:
 
 {memory_context}
+
+Return a JSON object with EXACTLY these top-level keys and no others:
+"status", "intent", "context", "assumptions", "unknowns", "questions"
 """
 
     return system_prompt, user_prompt

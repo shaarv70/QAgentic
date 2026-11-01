@@ -6,7 +6,7 @@
 
 Transform software requirements into high-quality QA deliverables using intelligent planning, workflow orchestration, AI review, automatic correction, and artifact publishing.
 
-**Current Version: `v0.5.0`**
+**Current Version: `v0.6.0`**
 
 </div>
 
@@ -58,6 +58,60 @@ The framework is built around modular agents, workflow orchestration, provider-i
 * Quality feedback propagation
 * Retry handling
 
+## 🌐 MCP Tool Execution
+
+* Model Context Protocol (MCP) client integration
+* MCP tool discovery per server
+* Stateful MCP session execution
+* MCP guardrail evaluation
+* Tool authorization policy enforcement
+* Human approval boundary for write operations
+* GitHub MCP integration (PR creation, repository operations)
+* Playwright MCP integration (browser automation)
+
+## 🔍 Page Inspection
+
+* Playwright MCP primary strategy (live DOM snapshot)
+* HTTP fallback strategy (direct HTML fetch and parse)
+* `PAGE_INSPECTION_STRATEGY` environment variable (`mcp` / `http`)
+* HTML structure extraction (title, headings, forms, inputs, buttons, links)
+* DOM snapshot injection into test case and automation prompts
+* Graceful degradation when both strategies fail
+
+## ▶️ Test Execution
+
+* Local subprocess-based test execution
+* Framework-agnostic command runner
+* Universal dependency pre-flight (npm, pip, bundler, go, dotnet)
+* JDK auto-discovery and `JAVA_HOME` patching
+* Playwright command normalisation (headless, reporter)
+* Execution timeout with full process tree cleanup
+* Execution output capture via temp files (avoids pipe inheritance hang)
+
+## 🔧 Self-Healing
+
+* Automatic failure diagnosis (COMPILE / SELECTOR / ASSERTION / TIMEOUT / CONFIG / OTHER)
+* Failure investigation and root-cause analysis
+* Full artifact regeneration when self-healing cannot patch in place
+* Proactive dependency pre-flight prevents CONFIG failures before they occur
+
+## 📁 Repository Operations
+
+* Repository capability with MCP-backed execution
+* GitHub MCP: PR creation, branch listing, repository inspection
+* Local-path resolution → git remote URL discovery → platform routing
+* Automatic enrichment of owner, head branch, base branch, and PR title from local git
+* Checkpoint-based resume for multi-step repository plans
+* Human approval boundary before write operations
+
+## 🤖 Repository Analysis
+
+* Static repository structure analysis
+* Test file discovery
+* Framework detection
+* Language and build-tool identification
+* Token-budget-aware analysis
+
 ## 🏗️ AI Infrastructure
 
 * Centralized `AIService`
@@ -92,7 +146,7 @@ The framework is built around modular agents, workflow orchestration, provider-i
 
 # 🏛️ Architecture
 
-The v0.5 architecture separates workflow orchestration, agent logic, prompt construction, AI infrastructure, knowledge retrieval, memory management, and provider-specific implementation.
+The v0.6 architecture extends the v0.5 foundation with MCP tool execution, browser-based page inspection, autonomous test execution, universal dependency management, self-healing, repository operations, and a Claude CLI provider.
 
 ```mermaid
 flowchart TD
@@ -119,10 +173,21 @@ Q["AgentProfileRegistry"]
 
 R["Groq Provider"]
 S["Ollama Provider"]
+S2["Claude CLI Provider"]
 
 T["LLMResponse"]
 U["TokenUsage"]
 V["LLMCost"]
+
+CAP["Capabilities"]
+PI["Page Inspection"]
+TE["Test Execution"]
+REPO["Repository"]
+SH["Self-Healing"]
+
+MCP["MCP Tool Executor"]
+GH["GitHub MCP"]
+PW["Playwright MCP"]
 
 A --> B
 B --> C
@@ -146,12 +211,25 @@ O --> Q
 
 P --> R
 P --> S
+P --> S2
 
 R --> T
 S --> T
+S2 --> T
 
 T --> U
 T --> V
+
+F --> CAP
+CAP --> PI
+CAP --> TE
+CAP --> REPO
+CAP --> SH
+
+PI --> MCP
+REPO --> MCP
+MCP --> GH
+MCP --> PW
 ```
 
 ---
@@ -365,14 +443,14 @@ generate(
 
 The current provider implementations include:
 
-| Provider         |       Status      |
-| ---------------- | :---------------: |
-| Groq             |         ✅         |
-| Ollama           |         ✅         |
-| Google Gemini    | Existing provider |
-| OpenAI           |      Planned      |
-| Anthropic Claude |      Planned      |
-| Azure OpenAI     |      Planned      |
+| Provider                |    Status   |
+| ----------------------- | :---------: |
+| Groq                    |      ✅      |
+| Ollama                  |      ✅      |
+| Claude CLI (MARS/OIDC)  |      ✅      |
+| Google Gemini           |  Available  |
+| OpenAI                  |   Planned   |
+| Azure OpenAI            |   Planned   |
 
 The provider abstraction allows the workflow and agents to remain independent of the underlying LLM provider.
 
@@ -416,6 +494,7 @@ QAgentic/
 │   ├── requirement_agent.py
 │   ├── requirement_intelligence_agent.py
 │   ├── review_agent.py
+│   ├── self_healing_agent.py          ← v0.6
 │   └── supervisor_agent.py
 │
 ├── ai/
@@ -447,6 +526,29 @@ QAgentic/
 │       ├── token_manager.py
 │       └── token_usage.py
 │
+├── capabilities/
+│   ├── base_capability.py
+│   ├── code_push/                     ← v0.6
+│   ├── page_inspection/               ← v0.6
+│   ├── repository/                    ← v0.6
+│   ├── repository_analysis/           ← v0.6
+│   ├── test_execution/                ← v0.6
+│   └── test_gap_analysis/             ← v0.6
+│
+├── infrastructure/
+│   ├── execution/
+│   │   └── local/
+│   │       └── local_execution_provider.py   ← v0.6
+│   └── repository/
+│       ├── git/
+│       └── mcp/
+│           └── mcp_repository_provider.py    ← v0.6
+│
+├── mcp_integration/
+│   ├── guardrails/                    ← v0.6
+│   └── tool/
+│       └── mcp_tool_executor.py       ← v0.6
+│
 ├── memory/
 │   ├── embeddings/
 │   ├── episodic/
@@ -457,9 +559,13 @@ QAgentic/
 ├── artifacts/
 ├── bootstrap/
 ├── constants/
+├── domain/
 ├── models/
 ├── prompts/
 ├── providers/
+│   ├── claude_cli_provider.py         ← v0.6
+│   ├── groq_provider.py
+│   └── ollama_provider.py
 ├── registries/
 ├── services/
 ├── utils/
@@ -535,11 +641,22 @@ GEMINI_API_KEY=
 OLLAMA_URL=http://localhost:11434/api/generate
 MODEL_NAME=
 
+# Claude CLI (MARS/OIDC) — no API key required; uses locally installed Claude Code CLI
+# LLM_PROVIDER=claude_cli
+
 # Logging
 LOG_LEVEL=INFO
 
 # Output
 OUTPUT_FOLDER=generated
+
+# Page inspection strategy: mcp (default) or http
+# mcp  — uses Playwright MCP, falls back to HTTP if MCP fails
+# http — skips Playwright and fetches page HTML directly via requests
+PAGE_INSPECTION_STRATEGY=mcp
+
+# Test execution timeout in seconds (default: 300)
+EXECUTION_TIMEOUT_SECONDS=1800
 ```
 
 Never commit `.env` or API credentials to Git.
@@ -578,9 +695,46 @@ Artifact Publishing
 
 ---
 
+# 📊 v0.6 Architecture Highlights
+
+Version `0.6.0` delivers the end-to-end execution pipeline: live page inspection, automated test execution, self-healing, repository operations via MCP, and the Claude CLI provider.
+
+### Added
+
+* MCP tool executor with server discovery and stateful session execution
+* MCP guardrail and tool authorization policy
+* Page inspection capability (Playwright MCP primary + HTTP fallback)
+* DOM snapshot extraction and injection into test case and automation prompts
+* Test execution capability with local subprocess runner
+* Universal dependency pre-flight (npm, pip, bundler, go, dotnet)
+* JDK auto-discovery and `JAVA_HOME` patching for Java/Maven/Gradle projects
+* Playwright command normalisation (strip `--headed`, inject `--reporter=line`)
+* Execution timeout with full process tree cleanup on Windows
+* Self-healing agent (COMPILE / SELECTOR / ASSERTION / TIMEOUT / CONFIG / OTHER)
+* Repository capability with MCP-backed execution and checkpoint resume
+* GitHub MCP integration (PR creation, repository operations)
+* Local-path → git remote URL discovery for repository routing
+* Automatic PR enrichment (owner, head branch, base branch, title) from local git
+* Repository analysis capability (structure, framework, language detection)
+* Test gap analysis capability
+* Code push capability
+* Claude CLI provider (`claude_cli`) routing through company MARS/OIDC environment
+* `PAGE_INSPECTION_STRATEGY` environment variable (`mcp` / `http`)
+* `EXECUTION_TIMEOUT_SECONDS` environment variable
+
+### Improved
+
+* Requirement intelligence constrained to emit only valid `execution_mode` values (`mcp` / `local`)
+* Automation prompt includes stealth browser args to reduce bot-detection blocks
+* Automation prompt enforces dependency install steps in `run_command` for all frameworks
+* DOM snapshot cleanly separated from general dependency context in prompts
+* Provider table extended with Claude CLI
+
+---
+
 # 📊 v0.5 Architecture Highlights
 
-Version `0.5.0` introduces the Knowledge and RAG foundation.
+Version `0.5.0` introduced the Knowledge and RAG foundation.
 
 ### Added
 
@@ -600,7 +754,6 @@ Version `0.5.0` introduces the Knowledge and RAG foundation.
 
 ### Improved
 
-* Reusable knowledge across executions
 * Context-aware agent generation
 * Separation of stored knowledge from runtime requirements
 * Semantic retrieval instead of exact keyword-only matching
@@ -611,13 +764,10 @@ Version `0.5.0` introduces the Knowledge and RAG foundation.
 
 # ⚠️ Known Limitations
 
-The v0.5 release focuses on establishing the knowledge and RAG foundation.
-
-* External repository/document indexing is not part of v0.5.
-* MCP-based external tool execution is not part of v0.5.
-* Tool authorization policies are not part of v0.5.
-* Guardrails and human approval workflows are planned for v0.6.
-* Autonomous test execution and self-healing capabilities are planned for future releases.
+* Akamai / Cloudflare-protected sites (e.g. Meesho) block both headless Playwright and HTTP page inspection. Use `automationexercise.com` or similar unprotected sites for end-to-end pipeline verification.
+* GitHub MCP requires the GitHub MCP server to be configured and authenticated in the local Claude Code MCP environment.
+* The Claude CLI provider requires the company MARS/OIDC environment setup to be completed before use.
+* External repository/document indexing is not included in v0.6.
 * Advanced external knowledge sources are planned for future versions.
 
 ---
@@ -631,36 +781,21 @@ The v0.5 release focuses on establishing the knowledge and RAG foundation.
 | v0.3.0 |    ✅   | LangGraph workflow, application container and workflow nodes |
 | v0.4.0 |    ✅   | AI infrastructure, provider abstraction, agent profiles, prompt/context architecture, token and cost tracking |
 | v0.5.0 |    ✅   | Knowledge, memory, embeddings and RAG foundation |
-| v0.6.0 |    🚧   | MCP, tool execution, guardrails and human approval |
+| v0.6.0 |    ✅   | MCP, tool execution, page inspection, test execution, self-healing, repository operations, Claude CLI provider |
 | v0.7.0 |    🚧   | Intelligent QA capabilities |
 | v0.8.0 |    🚧   | Enterprise integrations |
 | v0.9.0 |    🚧   | Advanced QA intelligence |
 | v1.0.0 |    🎯   | Production AI-QA platform |
 
-## v0.6 — MCP + Tool Execution + Guardrails
-
-The next version will establish the infrastructure required for AI agents to interact with external systems safely.
-
-Planned areas include:
-
-* MCP client/tool integration
-* Tool discovery and execution
-* Tool authorization
-* Guardrail evaluation
-* Human approval for sensitive operations
-* Controlled repository interaction
-* Controlled test execution
-* External system integration foundations
-
 ## v0.7 — Intelligent QA Capabilities
 
 Planned capabilities include:
 
-* Self-Healing Capability
 * UI ↔ Database Validation Capability
 * Failure Diagnosis Capability
 * CI/CD Pipeline Recovery Capability
 * Kafka / Staging Validation Capability
+* Appium mobile test support
 
 Capabilities may internally use agents, services, tools, MCP integrations, and retrieved knowledge.
 

@@ -24,4 +24,4 @@ class PromptResult:
         """
         yield self.system_prompt
         yield self.user_prompt
-        logger.info(self.user_prompt)
+        logger.debug(self.user_prompt)

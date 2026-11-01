@@ -17,6 +17,8 @@ from prompts.automation_prompt import build_automation_prompt
 from prompts.database_prompt import build_database_prompt
 from prompts.summary_prompt import build_summary_prompt
 from prompts.correction_prompt import build_correction_prompt
+from prompts.self_healing_prompt import build_self_healing_prompt
+from prompts.test_gap_analysis_prompt import build_test_gap_analysis_prompt
 
 
 class PromptBuilder:
@@ -45,14 +47,22 @@ class PromptBuilder:
         self.memory_context_service = memory_context_service
 
 
+    # Maximum characters of memory context injected into any prompt.
+    # Prevents large episodic memories (e.g. full prior test-case tables)
+    # from bloating the LLM input and causing timeout on generation.
+    _MEMORY_CONTEXT_MAX_CHARS = 4000
+
     def _memory(self,agent_name: str,query_text: str,capability: str | None = None, context: dict[str, str] | None = None,) -> str:
 
-        return self.memory_context_service.build(
-        agent_name=agent_name,
-        query_text=query_text,
-        capability=capability,
-        context=context,
-    )
+        raw = self.memory_context_service.build(
+            agent_name=agent_name,
+            query_text=query_text,
+            capability=capability,
+            context=context,
+        )
+        if len(raw) > self._MEMORY_CONTEXT_MAX_CHARS:
+            raw = raw[: self._MEMORY_CONTEXT_MAX_CHARS] + "\n... [memory truncated]"
+        return raw
 
     # ======================================================
     # Agent Prompts
@@ -135,13 +145,26 @@ class PromptBuilder:
     # ======================================================
 
 
-    def testcase(self,task,requirement,)-> PromptResult:
+    def testcase(self, task, requirement, dependency_artifacts=None) -> PromptResult:
 
         task_context = self.context_builder.task(task)
         requirement_context = self.context_builder.requirement(requirement)
-        memory_text = self._memory(AgentNames.TESTCASE,task.description,capability=task.capability,)
-        system_prompt, user_prompt=build_testcase_prompt(task_context,requirement_context,memory_text)
-        return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)
+        dependency_context = self.context_builder.artifacts(dependency_artifacts or {})
+        dom_snapshot = self._extract_dom_snapshot(dependency_artifacts or {})
+        memory_text = self._memory(AgentNames.TESTCASE, task.description, capability=task.capability)
+        system_prompt, user_prompt = build_testcase_prompt(
+            task_context, requirement_context, memory_text, dependency_context, dom_snapshot
+        )
+        return PromptResult(system_prompt=system_prompt, user_prompt=user_prompt)
+
+    @staticmethod
+    def _extract_dom_snapshot(dependency_artifacts: dict) -> str:
+        for artifact_content in dependency_artifacts.values():
+            if isinstance(artifact_content, dict) and artifact_content.get("page_inspection"):
+                snapshot = artifact_content.get("dom_snapshot", "")
+                if snapshot:
+                    return snapshot
+        return ""
 
 
 
@@ -194,6 +217,48 @@ class PromptBuilder:
         return PromptResult(system_prompt=system_prompt,user_prompt=user_prompt,)
 
 
+
+    def self_healing(
+        self,
+        execution_output: str,
+        automation_files_context: str,
+        requirement: str,
+        task,
+        dom_context: str = "",
+        diagnosis: dict | None = None,
+    ) -> PromptResult:
+        requirement_context = self.context_builder.requirement(requirement)
+        task_context = self.context_builder.task(task)
+        memory_text = self._memory(
+            AgentNames.SELF_HEALING,
+            task.description,
+            capability="test_execution",
+        )
+        system_prompt, user_prompt = build_self_healing_prompt(
+            execution_output=execution_output,
+            automation_files_context=automation_files_context,
+            requirement_context=requirement_context,
+            task_context=task_context,
+            memory_context=memory_text,
+            dom_context=dom_context,
+            diagnosis=diagnosis,
+        )
+        return PromptResult(system_prompt=system_prompt, user_prompt=user_prompt)
+
+    def self_healing_diagnosis(
+        self,
+        execution_output: str,
+        files_context: str,
+        requirement: str,
+    ) -> PromptResult:
+        from prompts.self_healing_diagnosis_prompt import build_self_healing_diagnosis_prompt
+        requirement_context = self.context_builder.requirement(requirement)
+        system_prompt, user_prompt = build_self_healing_diagnosis_prompt(
+            execution_output=execution_output,
+            files_context=files_context,
+            requirement_context=requirement_context,
+        )
+        return PromptResult(system_prompt=system_prompt, user_prompt=user_prompt)
 
     def mcp_execution(
     self,
@@ -302,6 +367,27 @@ class PromptBuilder:
         return context
 
 
+
+    def test_gap_analysis(
+        self,
+        workspace_path: str,
+        framework: str,
+        test_files_evidence: list,
+        source_files_evidence: list,
+    ) -> PromptResult:
+        memory_text = self._memory(
+            AgentNames.TEST_GAP_ANALYSIS,
+            f"{workspace_path} {framework} test gap analysis",
+            capability="test_gap_analysis",
+        )
+        system_prompt, user_prompt = build_test_gap_analysis_prompt(
+            workspace_path=workspace_path,
+            framework=framework,
+            test_files_evidence=test_files_evidence,
+            source_files_evidence=source_files_evidence,
+            memory_context=memory_text,
+        )
+        return PromptResult(system_prompt=system_prompt, user_prompt=user_prompt)
 
     def repository_analysis(
     self,

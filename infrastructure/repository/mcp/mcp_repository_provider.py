@@ -311,7 +311,7 @@ class MCPRepositoryProvider(RepositoryProvider):
             # EXECUTE MCP TOOL
             # ======================================================
 
-            result = self.mcp_tool_executor.execute(
+            result = await self.mcp_tool_executor.execute(
                 server_name=server_name,
                 tool_name=planned_operation.tool_name,
                 arguments=resolved_arguments,

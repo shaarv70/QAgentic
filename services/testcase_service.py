@@ -23,6 +23,7 @@ class TestCaseGenerator(BaseGenerator):
         prompt = self.prompt_builder.testcase(
             task,
             execution_context.requirement,
+            execution_context.dependency_artifacts,
         )
 
         return self.generate_text(
