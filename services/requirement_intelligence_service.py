@@ -21,6 +21,9 @@ class RequirementIntelligenceService:
 
         response = self.ai_service.generate_json(AgentNames.REQUIREMENT_INTELLIGENCE,request,)
 
+        from utils.logger import logger as _log
+        _log.info("RequirementIntelligence response keys: %s | intent=%r", list(response.keys()) if isinstance(response, dict) else type(response).__name__, response.get("intent") if isinstance(response, dict) else None)
+
         questions = response.get("questions",[])
 
         existing_keys = (self._parse_clarification_keys(clarification_context))
@@ -49,21 +52,38 @@ class RequirementIntelligenceService:
                 }
             )
 
+        # Normalise status so the router always receives "READY" or
+        # "NEEDS_CLARIFICATION" regardless of what the LLM returns.
+        # The model sometimes returns variants like "ready_to_proceed",
+        # "ready_for_execution", "needs_clarification_on_scope", etc.
+        if isinstance(response.get("status"), str):
+            raw_status = response["status"].upper()
+            if "CLARIF" in raw_status:
+                response["status"] = "NEEDS_CLARIFICATION"
+            else:
+                # Any "READY*" variant (READY, READY_TO_PROCEED, etc.) → READY
+                response["status"] = "READY"
+
         if (
             response.get("status") == "NEEDS_CLARIFICATION"
             and not filtered_questions
         ):
             response["status"] = "READY"
 
+        raw_intent = (
+            response.get("intent")
+            or response.get("goal")
+            or response.get("workflow_type")
+            or response.get("requirement_type")
+            or ""
+        )
+
         return RequirementIntelligence(
             status=response.get(
                 "status",
                 "READY"
             ),
-            intent=response.get(
-                "intent",
-                ""
-            ),
+            intent=raw_intent,
             context=response.get(
                 "context",
                 {}

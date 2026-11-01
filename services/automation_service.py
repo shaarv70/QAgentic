@@ -51,30 +51,29 @@ class AutomationGenerator(BaseGenerator):
         )
 
         contract_feedback = f"""
-The previous automation artifact must remain a structured automation
-artifact.
+The previous automation artifact must remain a structured automation artifact.
 
-Return ONLY valid JSON using exactly this contract:
+Return the corrected project using the EXACT delimiter format shown below.
+Do NOT use JSON. Do NOT use markdown fences inside file content.
 
-{{
-  "files": [
-    {{
-      "path": "relative/path/to/file",
-      "content": "complete file content"
-    }}
-  ],
-  "metadata": {{
-    "framework": "optional",
-    "language": "optional",
-    "build_tool": "optional",
-    "notes": []
-  }}
-}}
+--- BEGIN_FILE: relative/path/to/file ---
+[complete file content here, exactly as it would appear on disk]
+--- END_FILE ---
+
+Repeat for every file. After all files, add:
+
+--- BEGIN_METADATA ---
+framework: <framework name>
+language: <language>
+build_tool: <build tool>
+run_command: <exact command to compile and run the tests>
+notes:
+  - <note>
+--- END_METADATA ---
 
 Preserve correct files from the previous artifact. Change only what is
 required by the reviewer feedback, while ensuring the final artifact is a
-complete internally consistent project. Never return Markdown fences or a
-plain source-code blob.
+complete internally consistent project.
 
 REVIEWER FEEDBACK:
 {feedback}

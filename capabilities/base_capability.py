@@ -16,7 +16,27 @@ class BaseCapability(ABC):
         """Return the unique capability name."""
         raise NotImplementedError
 
-    
+    @property
+    def review_required(self) -> bool:
+        """
+        Whether the workflow should run a quality review on this
+        capability's output.  Override with False for best-effort
+        capabilities (e.g. page_inspection) whose graceful-degradation
+        path produces an intentionally empty artifact that must not
+        block the pipeline.
+        """
+        return True
+
+    @property
+    def healable(self) -> bool:
+        """
+        Whether this capability supports self-healing correction via correct().
+
+        When True, execute_task() returns a FAILED artifact instead of raising
+        so that the review + correction cycle can trigger self-healing.
+        Override with True in capabilities that implement correct().
+        """
+        return False
 
     @abstractmethod
     def execute(self, task: Any, context: Any = None) -> Any:

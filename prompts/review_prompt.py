@@ -96,6 +96,34 @@ GROUNDING RULES:
 8. When the task requires execution, evaluate the execution result,
    command, status, and evidence of the requested execution.
 
+REPOSITORY ANALYSIS CAPABILITY — SPECIFIC PASS CRITERIA:
+
+When the current task capability is "repository_analysis", PASS the
+artifact when ALL of the following hold:
+
+  REQUIRED (must be non-empty / non-null):
+    1. frameworks — at least one framework identified
+    2. test_locations OR suite_candidates — at least one test directory
+       or test file enumerated
+    3. execution_commands — at least one runnable command present
+       OR selected_suite is non-null and has its own command
+
+  CONDITIONAL:
+    4. requested_suite — must be non-null when the requirement
+       explicitly names a specific test (e.g. "Run X test").
+       If the suite could not be matched to a file or candidate,
+       selected_suite may remain null — that is acceptable.
+
+  DO NOT BLOCK on any of the following — they are informational and
+  do not affect test execution:
+    - runner_candidates format (@playwright/test vs npx playwright test)
+    - selected_runner being null or a package name
+    - metadata being empty or sparse
+    - deterministic being false when execution_commands is populated
+    - configuration_files being empty
+    - selected_suite being null when requested_suite was set but no
+      matching suite candidate was found
+
 REVIEW DECISION:
 
 PASS when the artifact adequately satisfies the CURRENT TASK.
@@ -146,6 +174,8 @@ UPSTREAM DEPENDENCY ARTIFACTS / PROJECT EVIDENCE:
 RELEVANT MEMORY:
 
 {memory_context}
+
+Return ONLY the JSON object with "status" and "feedback" keys. No markdown, no explanation.
 """
 
     return (

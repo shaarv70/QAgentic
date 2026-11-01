@@ -2,6 +2,7 @@ from agents.base_agent import BaseAgent
 from models.artifact import Artifact
 from concurrent.futures import ThreadPoolExecutor
 from models.execution_context import ExecutionContext
+from models.automation_artifact import AutomationArtifact
 from config import MAX_EXECUTION_RETRIES
 from utils.logger import logger
 from models.capability_result import CapabilityResult
@@ -237,6 +238,17 @@ class ExecutionAgent(BaseAgent):
                 failure_reason,
             )
 
+            # Healable capabilities (e.g. test_execution with self-healing)
+            # return the FAILED artifact so the review + correction cycle
+            # can trigger self-healing instead of aborting the workflow.
+            if getattr(capability, "healable", False):
+                logger.info(
+                    "%s failed but capability supports self-healing "
+                    "— returning artifact for review/correction",
+                    task.task_id,
+                )
+                return artifact
+
             if not failure_retryable:
 
                 raise RuntimeError(
@@ -348,17 +360,94 @@ class ExecutionAgent(BaseAgent):
         artifact,
     ):
 
-        if (
-            self._get_capability(
-                task.capability
+        capability = self._get_capability(task.capability)
+
+        if capability is not None:
+            prior_retry_count = artifact.review_retry_count
+
+            # Build execution context so the capability's correct() can access
+            # dependency artifacts and the requirement — same as execute_task().
+            dependency_artifacts = {}
+            for dependency_id in task.depends_on:
+                dep_artifact = state.artifacts.get(dependency_id)
+                if dep_artifact is None:
+                    raise RuntimeError(
+                        f"{task.task_id} requires {dependency_id}, "
+                        f"but its artifact is unavailable during correction."
+                    )
+                dependency_artifacts[dependency_id] = dep_artifact.content
+
+            execution_context = ExecutionContext(
+                requirement=state.requirement,
+                dependency_artifacts=dependency_artifacts,
+                workflow_state=state,
             )
-            is not None
-        ):
-            raise NotImplementedError(
-                f"Correction for capability "
-                f"'{task.capability}' "
-                f"is not implemented yet."
+
+            feedback = (
+                artifact.review.feedback
+                if artifact.review
+                else "Review failed — no specific feedback available."
             )
+
+            # Try the capability's self-healing correct() path first.
+            # Fall back to plain re-execution when not implemented.
+            try:
+                result = capability.correct(
+                    task,
+                    execution_context,
+                    artifact,
+                    feedback,
+                )
+
+                if not isinstance(result, CapabilityResult):
+                    raise RuntimeError(
+                        f"Capability '{task.capability}' correct() returned "
+                        f"an invalid result type."
+                    )
+
+                # When self-healing produced a patched AutomationArtifact,
+                # propagate it to state so downstream tasks (e.g. code_push)
+                # receive the fixed version rather than the original code.
+                if (
+                    isinstance(result.data, dict)
+                    and "_healed_automation_artifact" in result.data
+                ):
+                    healed = result.data["_healed_automation_artifact"]
+                    result.data = result.data.get("_execution_result")
+                    for dep_id in task.depends_on:
+                        dep_artifact = state.artifacts.get(dep_id)
+                        if (
+                            dep_artifact is not None
+                            and isinstance(dep_artifact.content, AutomationArtifact)
+                        ):
+                            dep_artifact.content = healed
+                            logger.info(
+                                "Propagated healed AutomationArtifact to %s",
+                                dep_id,
+                            )
+                            break
+
+                artifact.content = result.data
+                artifact.status = (
+                    "COMPLETED" if result.status == "PASSED" else "FAILED"
+                )
+                artifact.review_retry_count = prior_retry_count + 1
+                artifact.review = None
+
+                logger.info(
+                    f"{task.task_id} self-healing correction completed "
+                    f"(quality retry {artifact.review_retry_count})"
+                )
+                return artifact
+
+            except NotImplementedError:
+                logger.info(
+                    f"Capability '{task.capability}' has no correction mode — "
+                    f"re-executing as correction attempt."
+                )
+                new_artifact = self.execute_task(task, state)
+                new_artifact.review_retry_count = prior_retry_count + 1
+                return new_artifact
 
         start = time.perf_counter()
 
@@ -458,15 +547,14 @@ class ExecutionAgent(BaseAgent):
 
             dependencies_ready = all(
                 dependency_id in state.artifacts
-                and state.artifacts[
-                    dependency_id
-                ].status == "COMPLETED"
-                and state.artifacts[
-                    dependency_id
-                ].review is not None
-                and state.artifacts[
-                    dependency_id
-                ].review.status == "PASS"
+                and (
+                    state.artifacts[dependency_id].status == "FAILED"
+                    or (
+                        state.artifacts[dependency_id].status == "COMPLETED"
+                        and state.artifacts[dependency_id].review is not None
+                        and state.artifacts[dependency_id].review.status == "PASS"
+                    )
+                )
                 for dependency_id in task.depends_on
             )
 

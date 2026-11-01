@@ -1,3 +1,5 @@
+import re
+from pathlib import Path
 from typing import Any
 
 from capabilities.base_capability import BaseCapability
@@ -48,6 +50,21 @@ class RepositoryAnalysisCapability(BaseCapability):
                     retryable=False,
                 )
 
+            # Fail fast (non-retryable) when the workspace path doesn't exist.
+            # This happens when the planner incorrectly adds repository_analysis
+            # for a pure generate flow with no existing repository or directory.
+            from pathlib import Path as _Path
+            if not _Path(workspace_path).exists():
+                return CapabilityResult(
+                    status="FAILED",
+                    error=(
+                        f"Repository analysis skipped: workspace does not "
+                        f"exist at '{workspace_path}'. This task should not "
+                        f"be included in a pure generate flow."
+                    ),
+                    retryable=False,
+                )
+
             requested_suite = self._resolve_requested_suite(task)
 
             analysis_context = {
@@ -76,14 +93,14 @@ class RepositoryAnalysisCapability(BaseCapability):
             return CapabilityResult(
                 status="FAILED",
                 error=f"Repository analysis failed: {exc}",
-                retryable=True,
+                retryable=False,
             )
 
     def _resolve_workspace_path(
-    self,
-    task,
-    context,
-) -> str | None:
+        self,
+        task,
+        context,
+    ) -> str | None:
 
         # Direct workspace path from execution context
         if isinstance(context, dict):
@@ -136,6 +153,17 @@ class RepositoryAnalysisCapability(BaseCapability):
                 if path:
                     return path
 
+            # Local path requirement — planner sets repository_path
+            # when the user supplies a local directory instead of a URL.
+            repository_path = task_context.get(
+                "repository_path"
+            )
+
+            if repository_path:
+                return self._extract_path(
+                    repository_path
+                )
+
         # Legacy/direct dependency information
         dependencies = getattr(
             task,
@@ -154,6 +182,40 @@ class RepositoryAnalysisCapability(BaseCapability):
                 if path:
                     return path
 
+        # Last resort: scan every string value in the task context
+        # for a local filesystem path.  The requirement string always
+        # contains exactly what the user typed, regardless of which
+        # key name the LLM chose.
+        if isinstance(task_context, dict):
+            for value in task_context.values():
+                if isinstance(value, str):
+                    path = self._extract_local_path(value)
+                    if path:
+                        return path
+
+        return None
+
+    @staticmethod
+    def _extract_local_path(text: str) -> str | None:
+        """
+        Find the first local filesystem path in a string and return it
+        if it actually exists on disk.
+
+        Handles single-backslash (C:\\dir) and double-backslash
+        (C:\\\\dir, from JSON serialization) Windows paths, and Unix
+        absolute paths (/...).
+        """
+        # Normalize double backslashes so JSON-serialized paths work correctly.
+        normalized = text.replace("\\\\", "\\")
+        patterns = [
+            r"[A-Za-z]:\\(?:[^\s\\/:*?\"<>|]+\\)*[^\s\\/:*?\"<>|]*",
+            r"/(?:[^\s/]+/)*[^\s/]+",
+        ]
+        for pattern in patterns:
+            for match in re.finditer(pattern, normalized):
+                candidate = match.group(0).rstrip(".,;)")
+                if candidate and Path(candidate).exists():
+                    return candidate
         return None
 
     @staticmethod
@@ -168,19 +230,30 @@ class RepositoryAnalysisCapability(BaseCapability):
         if not isinstance(task_context, dict):
             return None
 
-        requested_suite = task_context.get(
-            "test_category"
-        )
+        for key in (
+            "test_identifier",
+            "test_name",
+            "suite",
+            "test_category",
+            "test_file",
+            "spec",
+            "test",
+        ):
+            value = task_context.get(key)
+            if value and isinstance(value, str):
+                return value.strip()
 
-        if requested_suite:
-            return str(requested_suite)
-
-        requested_suite = task_context.get(
-            "suite"
-        )
-
-        if requested_suite:
-            return str(requested_suite)
+        # Fallback: parse the requirement string.
+        # Handles patterns like "Run <TestName> test(s) in C:\..."
+        # where the planner did not explicitly store the suite name.
+        requirement_str = task_context.get("requirement", "")
+        if isinstance(requirement_str, str) and requirement_str.strip():
+            match = re.search(
+                r"\b([A-Z][A-Za-z0-9_]+)\s+tests?\b",
+                requirement_str,
+            )
+            if match:
+                return match.group(1).strip()
 
         return None
 

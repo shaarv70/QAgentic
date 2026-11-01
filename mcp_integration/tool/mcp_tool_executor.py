@@ -160,6 +160,56 @@ class MCPToolExecutor:
 
 
 
+    async def execute_session(
+        self,
+        server_name: str,
+        calls: list[tuple[str, dict]],
+    ) -> list:
+        """
+        Execute multiple tool calls within a single MCP client session.
+
+        This is required for stateful tool sequences — e.g. Playwright's
+        browser_navigate followed by browser_snapshot.  Each call to
+        execute() spawns a fresh subprocess (for stdio transport), so
+        browser state is lost between calls.  execute_session() keeps one
+        connection open for the entire sequence, preserving browser state.
+
+        Returns a list of raw tool results in call order.
+        Raises on the first tool error.
+        """
+
+        # Ensure all tools are in the catalog before connecting.
+        # This may spawn the server once for discovery, but the session
+        # below is a separate, persistent connection used for the actual calls.
+        for tool_name, _ in calls:
+            await self._ensure_tool_discovered(
+                server_name=server_name,
+                tool_name=tool_name,
+            )
+
+        # Validate all tools against guardrails before touching the server.
+        for tool_name, _ in calls:
+            self.guardrail.validate(
+                server_name=server_name,
+                tool_name=tool_name,
+            )
+
+        config = self.server_registry.get(server_name)
+        client = MCPClient(
+            config=config,
+            credential_provider=self.credential_provider,
+        )
+
+        try:
+            await client.connect()
+            results = []
+            for tool_name, arguments in calls:
+                result = await client.call_tool(tool_name, arguments or {})
+                results.append(result)
+            return results
+        finally:
+            await client.close()
+
     async def _ensure_tool_discovered(
         self,
         server_name: str,

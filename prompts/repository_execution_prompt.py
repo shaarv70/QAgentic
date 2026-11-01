@@ -19,7 +19,6 @@ Rules:
 - Use only MCP tools that are actually present in AVAILABLE MCP TOOLS.
 - Inspect the documented purpose and input schema of tools before selecting them.
 - Never invent a tool name.
-- Never invent tool arguments.
 - Never invent repository fields.
 - Never assume a particular repository provider.
 - Never assume GitHub unless it is explicitly present in the context.
@@ -30,22 +29,30 @@ Rules:
 - Do not generate Git commands unless an available MCP tool explicitly
   provides that capability.
 
-Repository operations include:
+Filter and parameter mapping:
 
-- inspect
-- read
-- search
-- modify
-- validate
-- diff
-- branch
-- commit
-- push
-- pull_request
+The REPOSITORY CONTEXT may contain filter or scoping fields such as:
+  state, pr_state, states, branch, label, author, base, head, per_page, page.
 
-These are semantic operations.
+If the selected MCP tool's schema supports any of these fields, include them
+as arguments. For example:
+  - If context contains "states": ["open", "closed"], call the tool once per
+    state with state="open" and state="closed" as separate operations, or
+    use state="all" if the tool supports it.
+  - If context contains "branch", pass it as the branch argument.
+  - If context contains "per_page" or "page", pass them for pagination.
 
-They are NOT MCP tool names.
+Do NOT omit filter fields that are present in the context — they represent
+the user's intent and must be reflected in the tool arguments.
+
+The repository operation supplied in REPOSITORY CONTEXT is a semantic intent,
+not a fixed keyword and not an MCP tool name.
+
+Examples of intents: inspect, read, list_pull_requests, list_issues,
+list_branches, search, modify, diff, branch, commit, push, pull_request.
+
+Any intent is valid. Your job is to map the intent to the appropriate
+MCP tool(s) from AVAILABLE MCP TOOLS.
 
 Execution feasibility:
 
@@ -94,13 +101,9 @@ or explicitly supplied in the repository context.
 
 Mutation safety:
 
-The following operations can change externally visible repository state:
-
-- modify
-- branch
-- commit
-- push
-- pull_request
+Operations that change externally visible repository state (modify, branch,
+commit, push, pull_request, create_pull_request, merge, and equivalents)
+require care.
 
 Do not silently replace an unsupported operation with another mutation.
 

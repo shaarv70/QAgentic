@@ -131,13 +131,83 @@ class AutomationArtifact:
         )
 
     @classmethod
+    def from_delimiter_content(cls, content: str) -> "AutomationArtifact":
+        """
+        Parse the delimiter-based format produced by the automation prompt.
+
+        Expected format:
+            --- BEGIN_FILE: relative/path/to/file ---
+            [file content]
+            --- END_FILE ---
+
+            --- BEGIN_METADATA ---
+            framework: ...
+            language: ...
+            --- END_METADATA ---
+
+        The BEGIN_FILE / END_FILE delimiters are matched case-insensitively
+        and tolerate minor spacing variations in the dashes.
+        """
+        file_pattern = re.compile(
+            r"-{2,}\s*BEGIN_FILE\s*:\s*(.+?)\s*-{2,}\n"
+            r"(.*?)"
+            r"-{2,}\s*END_FILE\s*-{2,}",
+            re.DOTALL | re.IGNORECASE,
+        )
+
+        files: list[AutomationFile] = []
+        for match in file_pattern.finditer(content):
+            path = match.group(1).strip().strip("`")
+            # Skip spurious matches: delimiter syntax or markdown table content
+            # leaking into the captured path (e.g. `--- END_FILE ---`) | ✅ |)
+            if not path or "---" in path or "|" in path or "\n" in path:
+                continue
+            file_content = match.group(2)
+            if file_content.startswith("\n"):
+                file_content = file_content[1:]
+            file_content = file_content.rstrip()
+            files.append(AutomationFile(path=path, content=file_content))
+
+        if not files:
+            raise ValueError(
+                "No BEGIN_FILE / END_FILE blocks found in delimiter format."
+            )
+
+        meta_pattern = re.compile(
+            r"-{2,}\s*BEGIN_METADATA\s*-{2,}\n"
+            r"(.*?)"
+            r"-{2,}\s*END_METADATA\s*-{2,}",
+            re.DOTALL | re.IGNORECASE,
+        )
+        metadata: dict[str, Any] = {}
+        meta_match = meta_pattern.search(content)
+        if meta_match:
+            meta_text = meta_match.group(1).strip()
+            try:
+                parsed_meta = json.loads(meta_text)
+                if isinstance(parsed_meta, dict):
+                    metadata = parsed_meta
+            except (json.JSONDecodeError, ValueError):
+                for line in meta_text.splitlines():
+                    line = line.strip()
+                    if ":" in line and not line.startswith("-"):
+                        key, _, val = line.partition(":")
+                        metadata[key.strip()] = val.strip()
+
+        return cls(files=tuple(files), metadata=metadata)
+
+    @classmethod
     def from_llm_content(cls, content: Any) -> "AutomationArtifact":
         """
         Parse the structured artifact returned by an LLM.
 
-        The LLM is instructed to return JSON only, but this parser also
-        tolerates a fenced JSON response so provider/model formatting does
-        not become an execution dependency.
+        Parsing order:
+        1. Delimiter format  (--- BEGIN_FILE: path --- ... --- END_FILE ---)
+        2. Raw JSON / fenced JSON  ({"files": [...]})
+
+        The delimiter format is tried first because it is the primary output
+        format requested by the automation prompt and is immune to
+        JSON-escaping failures in large Java/TypeScript source files.
         """
         if isinstance(content, cls):
             return content
@@ -150,6 +220,11 @@ class AutomationArtifact:
         text = content.strip()
         if not text:
             raise ValueError("Automation generator returned empty content.")
+
+        try:
+            return cls.from_delimiter_content(text)
+        except ValueError:
+            pass
 
         candidates = [text]
 
@@ -172,8 +247,9 @@ class AutomationArtifact:
 
         if parsed is None:
             raise ValueError(
-                "Automation generator must return a JSON automation artifact "
-                "with a 'files' array."
+                "Automation generator must return either the delimiter format "
+                "(--- BEGIN_FILE: path --- ... --- END_FILE ---) "
+                "or a JSON automation artifact with a 'files' array."
             ) from last_error
 
         return cls.from_dict(parsed)

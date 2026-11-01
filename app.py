@@ -78,8 +78,16 @@ Execution Flow:
     # -----------------------------------------------------
     while True:
 
-        # Read the user's requirement.
-        requirement = input("\nEnter Requirement: ").strip()
+        # Read the user's requirement (multi-line supported).
+        # Type or paste any number of lines, then type --- on its own line to submit.
+        print("\nEnter Requirement (type --- on a new line to submit):")
+        lines = []
+        while True:
+            line = input()
+            if line.strip() == "---":
+                break
+            lines.append(line)
+        requirement = "\n".join(lines).strip()
 
         # Gracefully terminate the application.
         if requirement.lower() == "exit":

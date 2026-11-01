@@ -60,10 +60,14 @@ from services.execution.execution_server_resolver import (
     ExecutionServerResolver,
 )
 from services.mcp_execution_service import MCPExecutionService
+from services.self_healing_service import SelfHealingService
+from agents.self_healing_agent import SelfHealingAgent
+from services.dom_capture_service import DOMCaptureService
 
 from services.repository.repository_analysis_service import (
     RepositoryAnalysisService,
 )
+from services.test_gap_analysis_service import TestGapAnalysisService
 from services.repository.repository_discovery import RepositoryDiscovery
 from services.repository.repository_execution_service import (
     RepositoryExecutionService,
@@ -76,10 +80,15 @@ from services.workspace.automation_workspace_materializer import (
 from services.workspace.local_workspace_service import (
     LocalWorkspaceService,
 )
+from services.workspace.workspace_retention_service import (
+    WorkspaceRetentionService,
+)
 
 from workflow.langgraph_engine import LangGraphEngine
 from workflow.workflow_builder import WorkflowBuilder
 from workflow.workflow_manager import WorkflowManager
+
+import config
 
 
 class ApplicationContainer:
@@ -97,6 +106,17 @@ class ApplicationContainer:
     capability_registry: CapabilityRegistry
 
     def create_supervisor(self):
+
+        # ==========================================================
+        # Workspace retention — prune stale workspaces at startup
+        # ==========================================================
+
+        WorkspaceRetentionService(
+            ttl_days=config.WORKSPACE_TTL_DAYS,
+            max_count=config.WORKSPACE_MAX_COUNT,
+            max_size_mb=config.WORKSPACE_MAX_SIZE_MB,
+            base_directory=config.WORKSPACE_BASE_DIR,
+        ).prune()
 
         # ==========================================================
         # Core registries / AI
@@ -207,11 +227,26 @@ class ApplicationContainer:
         execution_policy = ExecutionPolicy(
             allowed_commands=frozenset(
                 (
+                    # Python
                     "python",
+                    "python3",
+                    "pytest",
+                    # Node / JS
+                    "node",
+                    "npm",
+                    "npx",
+                    # Java / Maven
                     "mvn",
+                    "mvnw",
+                    # Java / Gradle
+                    "gradle",
+                    "gradlew",
+                    # .NET
+                    "dotnet",
                 )
             ),
             allow_shell=True,
+            timeout_seconds=config.EXECUTION_TIMEOUT_SECONDS,
         )
 
         execution_provider_factory = ExecutionProviderFactory(
@@ -263,6 +298,11 @@ class ApplicationContainer:
             repository_analysis_service=repository_analysis_service,
         )
 
+        test_gap_analysis_service = TestGapAnalysisService(
+            ai_service=ai_service,
+            prompt_builder=prompt_builder,
+        )
+
         # ==========================================================
         # Approval
         # ==========================================================
@@ -299,6 +339,16 @@ class ApplicationContainer:
         )
 
         # ==========================================================
+        # Self-healing service
+        # ==========================================================
+
+        self_healing_service = SelfHealingAgent(
+            ai_service=ai_service,
+            prompt_builder=prompt_builder,
+            dom_capture_service=DOMCaptureService(),
+        )
+
+        # ==========================================================
         # MCP repository operations
         #
         # Kept separate from workspace acquisition.
@@ -326,6 +376,9 @@ class ApplicationContainer:
                 automation_workspace_materializer
             ),
             repository_analysis_agent=repository_analysis_agent,
+            self_healing_service=self_healing_service,
+            approval_service=approval_service,
+            test_gap_analysis_service=test_gap_analysis_service,
         )
 
         # ==========================================================
