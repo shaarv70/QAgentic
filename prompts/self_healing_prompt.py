@@ -40,9 +40,10 @@ OUTPUT FORMAT — identical to the original automation format:
 [complete file content, exactly as it should appear on disk]
 --- END_FILE ---
 
-Repeat for every file in the project (changed AND unchanged).
+Return ONLY the files that need to change to fix the failure.
+Do NOT repeat unchanged files — they will be preserved automatically.
 
-After all files:
+After the changed files:
 
 --- BEGIN_METADATA ---
 framework: <framework name>

@@ -288,6 +288,7 @@ class TestExecutionCapability(BaseCapability):
                     task=task,
                     working_directory=working_directory,
                     server=server,
+                    local_provider=provider,
                 )
 
             raise RuntimeError(
@@ -469,6 +470,22 @@ class TestExecutionCapability(BaseCapability):
 
         server_name = server.server_name or server.name
 
+        # Guard: only accept this MCP server if it actually lists the requested
+        # framework in its frameworks tuple.  Without this check, the resolver's
+        # fallback behaviour returns the first registered MCP server (e.g. selenium)
+        # even when the framework is "playwright" — causing unnecessary MCP routing
+        # that always results in an executable=false plan.
+        if framework:
+            server_frameworks = {f.lower() for f in (server.frameworks or [])}
+            if framework.lower() not in server_frameworks:
+                logger.info(
+                    "MCP server %r does not support framework %r "
+                    "— skipping MCP, using local execution",
+                    server_name,
+                    framework,
+                )
+                return None
+
         # Suppress noise emitted by anyio/httpcore async-generator
         # cleanup when the MCP connection is refused:
         #   • sys.unraisablehook — covers GC-raised exceptions
@@ -617,6 +634,7 @@ class TestExecutionCapability(BaseCapability):
         task: Any,
         working_directory: str,
         server,
+        local_provider=None,
     ) -> CapabilityResult:
 
         # --------------------------------------------------
@@ -634,6 +652,11 @@ class TestExecutionCapability(BaseCapability):
                 "No MCP tools were discovered on "
                 f"execution server '{server.name}'."
             )
+
+        # Trim tool definitions to name + description only so the MCPExecution
+        # prompt stays within the model's context window.  Full JSON schemas for
+        # 20+ tools can push the prompt over 8k tokens on small-context models.
+        available_tools = self._summarise_tools(available_tools)
 
         # --------------------------------------------------
         # 2. Build semantic execution context
@@ -672,9 +695,16 @@ class TestExecutionCapability(BaseCapability):
         if not plan.executable:
 
             logger.warning(
-                "MCP execution is not supported: "
-                f"{plan.reason}"
+                "MCP execution is not supported: %s — falling back to local execution",
+                plan.reason,
             )
+
+            if local_provider is not None:
+                return self._execute_local(
+                    request=request,
+                    working_directory=working_directory,
+                    provider=local_provider,
+                )
 
             return CapabilityResult(
                 status="FAILED",
@@ -1613,6 +1643,29 @@ class TestExecutionCapability(BaseCapability):
     # ==========================================================
     # Result reference resolution
     # ==========================================================
+
+    @staticmethod
+    def _summarise_tools(available_tools: Any) -> Any:
+        """
+        Reduce tool definitions to name + description only.
+
+        Full JSON schemas for 20+ MCP tools can push the MCPExecution prompt
+        over 8k tokens on small-context models.  The agent only needs to know
+        what each tool is called and what it does to decide whether the task
+        is executable via MCP.
+        """
+        if not isinstance(available_tools, list):
+            return available_tools
+        summarised = []
+        for tool in available_tools:
+            if isinstance(tool, dict):
+                summarised.append({
+                    "name":        tool.get("name", ""),
+                    "description": tool.get("description", ""),
+                })
+            else:
+                summarised.append(tool)
+        return summarised
 
     def _resolve_result_references(
         self,

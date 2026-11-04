@@ -30,8 +30,9 @@ GENERAL RULES:
 8. Return ONLY valid JSON. Do not return markdown or explanations.
 
 URL INSPECTION RULE (high priority — applies before PURE GENERATE FLOW RULE):
-If the requirement explicitly provides a web application URL (http/https) AND the
-workflow involves GENERATING new test automation code from scratch (no existing repo):
+If a web application URL is available — either explicitly provided in the requirement
+(http/https) OR resolved in the requirement intelligence context as "target_url" —
+AND the workflow involves GENERATING new test automation code from scratch (no existing repo):
   - ADD a page_inspection task as the FIRST task (no dependencies).
   - page_inspection navigates to the URL using Playwright MCP and captures the
     real DOM accessibility tree — enabling accurate selectors and test generation.
@@ -40,6 +41,7 @@ workflow involves GENERATING new test automation code from scratch (no existing 
   - test_execution MUST depend on automation.
   - The correct workflow is: page_inspection -> testcase -> automation -> test_execution.
   - Pass the target URL in the page_inspection task context (key: target_url).
+    Use "target_url" from the requirement intelligence context if available.
   - Do NOT add page_inspection when running tests from an existing repository.
 
 PURE GENERATE FLOW RULE (highest priority):

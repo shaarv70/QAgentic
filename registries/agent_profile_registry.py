@@ -10,9 +10,8 @@ _PROVIDER_DEFAULT_MODELS: dict[str, str] = {
     "claude_cli": "claude-sonnet-4-6",
 }
 
-# Legacy fallback — preserved so existing .env files that point to Groq
-# and still work with the old model name don't break.
-_LEGACY_DEFAULT = "openai/gpt-oss-120b"
+# Legacy fallback — used when LLM_PROVIDER is unrecognised and MODEL_NAME is unset.
+_LEGACY_DEFAULT = "llama-3.3-70b-versatile"
 
 
 def _resolve_model() -> str:
@@ -195,14 +194,16 @@ class AgentProfileRegistry(BaseRegistry[AgentProfile]):
             ),
         )
 
-        # SelfHealingAgent — fix-generation call (returns delimiter-formatted files)
+        # SelfHealingAgent — fix-generation call (returns only changed files).
+        # max_output_tokens is kept small so input + output fits within
+        # models that have an 8k total context window (e.g. openai/gpt-oss-120b).
         self.register(
             AgentNames.SELF_HEALING_AGENT,
             AgentProfile(
                 agent_name=AgentNames.SELF_HEALING_AGENT,
                 model=model,
                 temperature=0.1,
-                max_output_tokens=8000,
+                max_output_tokens=3500,
             ),
         )
 
