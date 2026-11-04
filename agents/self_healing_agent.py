@@ -7,6 +7,19 @@ from models.automation_artifact import AutomationArtifact, AutomationFile
 from ai.models.llm_request import LLMRequest
 from utils.logger import logger
 
+# Token-budget limits for the fix-generation call.
+# Keep total context well under 8k (input + max_output_tokens) so the call
+# works on models with small context windows (e.g. openai/gpt-oss-120b on Groq).
+_EXECUTION_OUTPUT_MAX_CHARS = 1_500   # last N chars of the failure log
+_FILES_CONTEXT_MAX_CHARS    = 3_500   # total across all files sent to the LLM
+_FILE_MAX_CHARS             = 2_000   # single file cap
+
+# Build-descriptor filenames that are always useful for CONFIG / COMPILE fixes.
+_BUILD_DESCRIPTORS = frozenset({
+    "pom.xml", "package.json", "build.gradle", "build.gradle.kts",
+    "requirements.txt", "Gemfile", "go.mod", "*.csproj",
+})
+
 
 class SelfHealingAgent(BaseAgent):
     """
@@ -332,9 +345,11 @@ class SelfHealingAgent(BaseAgent):
         workspace_path: str,
     ) -> dict:
         """
-        CONFIG: collect all project configuration files that are not yet
-        in the artifact (testng.xml, *.properties, *.yaml, *.yml, pom.xml)
-        so the LLM has complete dependency and runner context.
+        CONFIG: collect project configuration files (testng.xml, *.properties,
+        *.yaml, *.yml) so the LLM has complete dependency and runner context.
+
+        Skips test-output / build directories and caps file size + total
+        context to stay within model token limits.
         """
         if not workspace_path:
             return {}
@@ -344,17 +359,26 @@ class SelfHealingAgent(BaseAgent):
         workspace = Path(workspace_path).resolve()
         existing_paths = {f.path for f in automation_artifact.files}
 
-        config_globs = [
-            "testng*.xml", "*.properties", "*.yaml", "*.yml",
-        ]
+        _SKIP_DIRS = {
+            "target", ".git", "node_modules",
+            # Test result / report directories — not project config
+            "test-output", "test-results", "surefire-reports",
+            "build", "out", "dist", ".gradle", "reports", "html-report",
+        }
+        _MAX_FILE_CHARS = 6_000   # single file cap — skip oversized result XML
+        _MAX_TOTAL_CHARS = 20_000  # total cap across all config files
+
+        config_globs = ["testng*.xml", "*.properties", "*.yaml", "*.yml"]
 
         extra_files: list[AutomationFile] = []
+        total_chars = 0
 
         for pattern in config_globs:
             for cfg_file in workspace.rglob(pattern):
-                # Skip deep target/ or .git/ directories
+                if total_chars >= _MAX_TOTAL_CHARS:
+                    break
                 parts = cfg_file.parts
-                if any(p in {"target", ".git", "node_modules"} for p in parts):
+                if any(p in _SKIP_DIRS for p in parts):
                     continue
                 try:
                     rel = str(cfg_file.resolve().relative_to(workspace)).replace("\\", "/")
@@ -364,12 +388,17 @@ class SelfHealingAgent(BaseAgent):
                     continue
                 existing_paths.add(rel)
                 try:
-                    extra_files.append(AutomationFile(
-                        path=rel,
-                        content=cfg_file.read_text(encoding="utf-8", errors="replace"),
-                    ))
+                    content = cfg_file.read_text(encoding="utf-8", errors="replace")
                 except OSError:
-                    pass
+                    continue
+                if len(content) > _MAX_FILE_CHARS:
+                    logger.debug(
+                        "SelfHealingAgent | CONFIG — skipping large file %s (%d chars)",
+                        rel, len(content),
+                    )
+                    continue
+                extra_files.append(AutomationFile(path=rel, content=content))
+                total_chars += len(content)
 
         if extra_files:
             logger.info(
@@ -394,24 +423,34 @@ class SelfHealingAgent(BaseAgent):
         extra_context: dict,
     ) -> AutomationArtifact:
         """
-        Full fix-generation LLM call enriched with all gathered context.
+        Fix-generation LLM call with trimmed context.
+
+        Keeps only the files most relevant to the failure (failing file +
+        build descriptor) and caps execution_output to reduce token usage
+        so the call fits within small model context windows (e.g. 8k).
+
+        The LLM is instructed to return ONLY changed files; we merge the
+        result back with the original artifact so unchanged files survive.
         """
-        files_context = self._format_files(automation_artifact)
+        failing_file = diagnosis.get("failing_file") or ""
+        files_context = self._format_files_for_healing(
+            automation_artifact, failing_file
+        )
 
-        # Merge all investigation outputs into a single dom_context string
-        # so the existing prompt template can inject them cleanly.
+        # Cap execution output — errors are always at the tail.
+        trimmed_output = execution_output[-_EXECUTION_OUTPUT_MAX_CHARS:]
+        if len(trimmed_output) < len(execution_output):
+            trimmed_output = "...(truncated)...\n" + trimmed_output
+
         investigation_parts = []
-
         if extra_context.get("dom_context"):
             investigation_parts.append(extra_context["dom_context"])
-
         if extra_context.get("assertion_detail"):
             investigation_parts.append(extra_context["assertion_detail"])
-
         dom_context = "\n\n".join(investigation_parts)
 
         prompt = self.prompt_builder.self_healing(
-            execution_output=execution_output,
+            execution_output=trimmed_output,
             automation_files_context=files_context,
             requirement=requirement,
             task=task,
@@ -427,7 +466,10 @@ class SelfHealingAgent(BaseAgent):
             ),
         )
 
-        return AutomationArtifact.from_llm_content(response.content)
+        # LLM returns only the changed files — merge back with the original
+        # so that unchanged files are preserved in the returned artifact.
+        healed = AutomationArtifact.from_llm_content(response.content)
+        return self._merge_healed(automation_artifact, healed)
 
     # ------------------------------------------------------------------
     # Utilities
@@ -442,6 +484,79 @@ class SelfHealingAgent(BaseAgent):
         if not extra_files:
             return artifact
         return AutomationArtifact(files=tuple(list(artifact.files) + extra_files))
+
+    @staticmethod
+    def _merge_healed(
+        original: AutomationArtifact,
+        healed: AutomationArtifact,
+    ) -> AutomationArtifact:
+        """
+        Overlay healed files on top of the original artifact.
+        Files present in healed replace their counterparts in original;
+        files NOT in healed are carried through unchanged.
+        """
+        if not healed.files:
+            return original
+        healed_paths = {f.path for f in healed.files}
+        kept = [f for f in original.files if f.path not in healed_paths]
+        return AutomationArtifact(files=tuple(kept + list(healed.files)))
+
+    @staticmethod
+    def _format_files_for_healing(
+        artifact: AutomationArtifact,
+        failing_file: str,
+    ) -> str:
+        """
+        Build a compact files context for the fix-generation call.
+
+        Priority order:
+          1. The failing file (most important — always included if present)
+          2. Build descriptor (pom.xml / package.json / etc.)
+          3. Remaining files up to the token budget
+
+        Each file is capped at _FILE_MAX_CHARS; total is capped at
+        _FILES_CONTEXT_MAX_CHARS so the call fits within small context windows.
+        """
+        import os
+
+        def _is_build_descriptor(path: str) -> bool:
+            name = os.path.basename(path).lower()
+            return name in _BUILD_DESCRIPTORS
+
+        def _truncate(content: str) -> str:
+            if len(content) <= _FILE_MAX_CHARS:
+                return content
+            return content[:_FILE_MAX_CHARS] + "\n...(truncated)"
+
+        def _block(f: AutomationFile) -> str:
+            return (
+                f"--- BEGIN_FILE: {f.path} ---\n"
+                f"{_truncate(f.content)}\n"
+                f"--- END_FILE ---"
+            )
+
+        # Sort: failing file first, build descriptors second, rest last.
+        failing_lower = failing_file.lower()
+
+        def _priority(f: AutomationFile) -> int:
+            if failing_lower and f.path.lower().endswith(failing_lower):
+                return 0
+            if _is_build_descriptor(f.path):
+                return 1
+            return 2
+
+        sorted_files = sorted(artifact.files, key=_priority)
+
+        parts: list[str] = []
+        total = 0
+        for f in sorted_files:
+            block = _block(f)
+            if total + len(block) > _FILES_CONTEXT_MAX_CHARS and parts:
+                break
+            parts.append(block)
+            total += len(block)
+
+        return "\n\n".join(parts)
 
     @staticmethod
     def _format_files(artifact: AutomationArtifact) -> str:

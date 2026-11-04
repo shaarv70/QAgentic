@@ -76,6 +76,17 @@ MCP server identification rules:
   "playwright", or any other value.
 - Never invent an MCP server name.
 
+Web application URL resolution:
+
+- When the requirement mentions a website or web application by name (e.g. "Flipkart",
+  "Amazon", "Google", "YouTube") without providing an explicit URL, resolve the
+  well-known public URL and include it as "target_url" in the context.
+  Examples: "Flipkart" → "https://www.flipkart.com",
+            "Amazon"   → "https://www.amazon.com",
+            "Google"   → "https://www.google.com"
+- When the requirement provides an explicit URL, use it directly as "target_url".
+- Always include "target_url" in context when a web application is the test target.
+- Do not include "target_url" for non-web (API-only, CLI, mobile) requirements.
 
 
 Return only the JSON object.
